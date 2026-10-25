@@ -20,11 +20,12 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: System packages
-        timeout-minutes: 10
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libgtk-4-dev libadwaita-1-dev ffmpeg espeak-ng fonts-dejavu-core
+      - name: System packages (cached between runs)
+        timeout-minutes: 15
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: libgtk-4-dev libadwaita-1-dev ffmpeg espeak-ng fonts-dejavu-core
+          version: "1"
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
