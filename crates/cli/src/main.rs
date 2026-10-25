@@ -1,6 +1,7 @@
 //! `shorts` — headless Shorts Studio.
 //!
-//!   shorts selftest [DIR]          offline end-to-end run (mock models) → MP4 in DIR
+//!   shorts selftest [DIR]          offline end-to-end run (mock models) → 9:16 Short in DIR
+//!   shorts selftest-long [DIR]     same for a 16:9 long video with chapters
 //!   shorts plan [N]                ask the strategist for N ideas
 //!   shorts list                    show the board
 //!   shorts run <ID|all> [--publish youtube|outbox]
@@ -9,7 +10,7 @@
 //!   shorts connect-youtube         one-time Google sign-in
 
 use shorts_core::config::{ProviderConfig, ProviderKind, Settings, VoiceEngine};
-use shorts_core::model::Stage;
+use shorts_core::model::{ProjectKind, Stage};
 use shorts_core::publish::{Outbox, Publisher, YouTube};
 use shorts_core::router::Router;
 use shorts_core::store::Store;
@@ -40,7 +41,8 @@ fn publisher_from(args: &[String], s: &Settings, store: &Store) -> Result<Option
 fn run(args: &[String]) -> Result<()> {
     let cmd = args.first().map(String::as_str).unwrap_or("help");
     match cmd {
-        "selftest" => selftest(args.get(1).map(String::as_str)),
+        "selftest" => selftest(args.get(1).map(String::as_str), ProjectKind::Short),
+        "selftest-long" => selftest(args.get(1).map(String::as_str), ProjectKind::Long),
         "plan" => {
             let s = Settings::load_or_default()?;
             let store = Store::open(&s.data_path()?)?;
@@ -135,7 +137,7 @@ fn run(args: &[String]) -> Result<()> {
 }
 
 /// Offline end-to-end check used by CI and the daily test run.
-fn selftest(dir: Option<&str>) -> Result<()> {
+fn selftest(dir: Option<&str>, kind: ProjectKind) -> Result<()> {
     let root = std::path::PathBuf::from(dir.unwrap_or("selftest-out"));
     let mut s = Settings {
         data_dir: root.display().to_string(),
@@ -143,6 +145,7 @@ fn selftest(dir: Option<&str>) -> Result<()> {
             name: "mock".into(), kind: ProviderKind::Mock, model: "mock".into(),
             api_key_env: None, base_url: None, daily_token_budget: 0, enabled: true,
         }],
+        long_minutes: 1,
         ..Default::default()
     };
     s.roles.strategist = vec!["mock".into()];
@@ -176,20 +179,40 @@ fn selftest(dir: Option<&str>) -> Result<()> {
     let store = Store::open(&root)?;
     let router = Router::from_settings(&s)?;
     let ideas = agents::plan_ideas(&router, &s.context(), &[], 1)?;
-    let v = workflow::new_video(&store, ideas[0].clone())?;
+    let v = workflow::new_project(&store, ideas[0].clone(), kind)?;
     let outbox = Outbox { dir: root.join("outbox") };
     let done = workflow::run_video(&s, &router, &store, Some(&outbox), v, Default::default(), &|m| println!("  {m}"))?;
     let file = done.video_file.clone().unwrap_or_default();
     let secs = voice::duration(std::path::Path::new(&file)).unwrap_or(0.0);
+    let size = video_size(&file);
+    let chapters = done.script.as_ref().map(|sc| shorts_core::model::chapter_lines(sc, &done.scene_seconds)).unwrap_or_default();
     println!(
         "{}",
         serde_json::json!({"ok": done.stage == Stage::Published, "stage": done.stage.label(), "video": file,
                            "seconds": secs, "voice": format!("{:?}", s.voice), "published": done.published_url,
                            "music": done.music.as_ref().map(|m| m.music_credit()),
-                           "legal": done.legal.as_ref().map(|l| l.overall.clone())})
+                           "legal": done.legal.as_ref().map(|l| l.overall.clone()),
+                           "kind": kind.label(), "size": size, "chapters": chapters})
     );
-    if done.stage != Stage::Published || secs < 5.0 {
-        return Err(shorts_core::Error::Config("selftest did not reach Published with a playable video".into()));
+    let (want_secs, want_size) = match kind {
+        ProjectKind::Long => (60.0, "1920x1080"),
+        _ => (5.0, "1080x1920"),
+    };
+    if done.stage != Stage::Published || secs < want_secs || size != want_size {
+        return Err(shorts_core::Error::Config(format!(
+            "selftest failed: stage {}, {secs:.1} s (need {want_secs}), size {size} (need {want_size})", done.stage.label())));
+    }
+    if kind == ProjectKind::Long && chapters.len() < 3 {
+        return Err(shorts_core::Error::Config(format!("selftest failed: expected at least 3 chapters, got {chapters:?}")));
     }
     Ok(())
+}
+
+/// "WIDTHxHEIGHT" of the first video stream, via ffprobe.
+fn video_size(file: &str) -> String {
+    std::process::Command::new("ffprobe")
+        .args(["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=s=x:p=0", file])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_default()
 }

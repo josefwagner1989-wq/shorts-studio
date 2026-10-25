@@ -149,7 +149,21 @@ impl LlmProvider for MockProvider {
         &self.name
     }
     fn complete(&self, req: &ChatRequest) -> Result<ChatResponse> {
-        let text = if req.prompt.contains("TASK: IDEAS") {
+        let text = if req.prompt.contains("TASK: OUTLINE") {
+            json!([
+                {"title": "Intro", "points": ["The problem", "What you will learn"]},
+                {"title": "Why answers go wrong", "points": ["Missing context", "No examples"]},
+                {"title": "Three fixes", "points": ["Role", "Example", "Questions first"]}
+            ]).to_string()
+        } else if req.prompt.contains("TASK: CHAPTER") {
+            json!({"scenes": [
+                {"seconds": 7, "onScreen": "Here is the first point", "voiceover": "Here is the first point of this chapter, explained simply.", "visual": "title card"},
+                {"seconds": 7, "onScreen": "Now a concrete example", "voiceover": "Now a concrete example, so you can see it working.", "visual": "example"},
+                {"seconds": 7, "onScreen": "What to do next", "voiceover": "And here is what to do next before the next chapter.", "visual": "summary"}
+            ]}).to_string()
+        } else if req.prompt.contains("TASK: LONGCAPTION") {
+            json!({"caption": "How to get better answers from any AI, step by step.", "hashtags": ["#AI", "#tutorial"]}).to_string()
+        } else if req.prompt.contains("TASK: IDEAS") {
             json!([
                 {"title": "3 tricks that fix bad AI answers", "hook": "Your AI answers are bad because of this",
                  "angle": "Three concrete habits, each shown with a real example", "format": "tip"},

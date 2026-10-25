@@ -43,6 +43,13 @@ jobs:
           tail -1 selftest.out > selftest.json
           echo "::notice title=selftest::$(cat selftest.json)"
           grep -q '"ok":true' selftest.json
+      - name: End-to-end selftest, long video (outline → chapters → 16:9 render → chapters in description)
+        run: |
+          set -o pipefail
+          ci/run.sh selftest-long cargo run -p shorts-cli -- selftest-long selftest-long-out | tee selftest-long.out
+          tail -1 selftest-long.out > selftest-long.json
+          echo "::notice title=selftest-long::$(cat selftest-long.json)"
+          grep -q '"ok":true' selftest-long.json
       - name: Grab a frame for review
         if: always()
         run: |

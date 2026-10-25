@@ -42,6 +42,10 @@ fn yes() -> bool {
     true
 }
 
+fn eight() -> u32 {
+    8
+}
+
 fn outbox() -> String {
     "outbox".into()
 }
@@ -183,6 +187,9 @@ pub struct Settings {
     pub music: MusicSettings,
     #[serde(default)]
     pub brand: crate::brand::Brand,
+    /// Target length of long videos, in minutes.
+    #[serde(default = "eight")]
+    pub long_minutes: u32,
     #[serde(default)]
     pub publish: PublishSettings,
     /// Where projects, audio and videos are written. Empty = XDG data dir.
@@ -218,6 +225,7 @@ impl Default for Settings {
             render: RenderSettings::default(),
             music: MusicSettings::default(),
             brand: crate::brand::Brand::default(),
+            long_minutes: eight(),
             publish: PublishSettings::default(),
             data_dir: String::new(),
         }

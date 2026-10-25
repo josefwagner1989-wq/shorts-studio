@@ -100,3 +100,67 @@ Reply with JSON: {{\"overall\": \"low\"|\"medium\"|\"high\", \"findings\": [{{\"
     r.overall = r.overall.to_lowercase();
     Ok(r)
 }
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct ChapterOutline {
+    pub title: String,
+    #[serde(default)]
+    pub points: Vec<String>,
+}
+
+/// Chapter outline for a long video of about `minutes` minutes.
+pub fn outline(router: &Router, context: &str, idea: &Idea, minutes: u32) -> Result<Vec<ChapterOutline>> {
+    let prompt = format!(
+        "TASK: OUTLINE\nChannel strategy:\n{context}\n\nVideo: {}\nHook: {}\nAngle: {}\nTarget length: about {minutes} minutes, 16:9 YouTube video.\n\
+Plan 4-8 chapters. The first chapter is a short intro that delivers the hook and says what the viewer will get; the last one wraps up with a specific call to action. \
+Each chapter has 2-5 concrete points, in order.\n\
+Reply with a JSON array: [{{\"title\": string (max 40 chars, used as a YouTube chapter name), \"points\": [string]}}]",
+        idea.title, idea.hook, idea.angle,
+    );
+    let mut chapters: Vec<ChapterOutline> = jsonx::extract(&ask(router, Role::Strategist, prompt, 2000, 0.6)?)?;
+    chapters.retain(|c| !c.title.trim().is_empty());
+    if chapters.len() < 3 {
+        return Err(Error::Parse(format!("outline has {} chapters; at least 3 are needed", chapters.len())));
+    }
+    Ok(chapters)
+}
+
+/// Writes one chapter's scenes; scenes are tagged with the chapter title.
+pub fn write_chapter(router: &Router, context: &str, idea: &Idea, all: &[ChapterOutline], index: usize, seconds: u32) -> Result<Script> {
+    let ch = &all[index];
+    let toc: Vec<String> = all.iter().enumerate().map(|(i, c)| format!("{}. {}", i + 1, c.title)).collect();
+    let prompt = format!(
+        "TASK: CHAPTER\nChannel strategy:\n{context}\n\nVideo: {}\nAngle: {}\nAll chapters:\n{}\n\n\
+Write chapter {} \"{}\" covering: {}.\nAbout {seconds} seconds of narration, 16:9, one point per scene, on-screen text max 10 words, \
+voiceover speakable in the scene's seconds (about 2.5 words per second). Do not repeat other chapters. Write in the channel's language.\n\
+Reply with JSON: {{\"scenes\": [{{\"seconds\": number, \"onScreen\": string, \"voiceover\": string, \"visual\": string}}]}}",
+        idea.title, idea.angle, toc.join("\n"), index + 1, ch.title, ch.points.join("; "),
+    );
+    let mut script: Script = jsonx::extract(&ask(router, Role::Writer, prompt, 3000, 0.7)?)?;
+    if script.scenes.is_empty() {
+        return Err(Error::Parse(format!("chapter {} has no scenes", ch.title)));
+    }
+    for s in &mut script.scenes {
+        s.seconds = s.seconds.clamp(2.0, 30.0);
+        s.chapter = ch.title.clone();
+    }
+    Ok(script)
+}
+
+/// Caption and hashtags for a finished long video.
+pub fn long_caption(router: &Router, context: &str, idea: &Idea, chapters: &[ChapterOutline]) -> Result<(String, Vec<String>)> {
+    #[derive(serde::Deserialize)]
+    struct Out {
+        caption: String,
+        #[serde(default)]
+        hashtags: Vec<String>,
+    }
+    let prompt = format!(
+        "TASK: LONGCAPTION\nChannel strategy:\n{context}\n\nVideo: {}\nAngle: {}\nChapters: {}\n\
+Write the first lines of the YouTube description (2-3 sentences, what the viewer learns) and 3-6 hashtags.\n\
+Reply with JSON: {{\"caption\": string, \"hashtags\": [string]}}",
+        idea.title, idea.angle, chapters.iter().map(|c| c.title.as_str()).collect::<Vec<_>>().join(", "),
+    );
+    let o: Out = jsonx::extract(&ask(router, Role::Writer, prompt, 600, 0.6)?)?;
+    Ok((o.caption, o.hashtags))
+}

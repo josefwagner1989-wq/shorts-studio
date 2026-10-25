@@ -111,12 +111,14 @@ fn scene_graph(text: &str, index: usize, count: usize, dur: f32, s: &RenderSetti
 
     let shown = if s.uppercase { text.to_uppercase() } else { text.to_string() };
     let text_file = work.join(format!("text-{index:02}.txt"));
-    std::fs::write(&text_file, wrap(&shown, s.wrap_chars))?;
     let font_arg = match find_font(s) {
         Some(f) => format!("fontfile='{}'", clean(Path::new(&f))),
         None => "font='Sans'".to_string(),
     };
-    let fontsize = (w as f32 * s.font_scale.clamp(0.03, 0.16)) as u32;
+    // Size text from the short side so 9:16 and 16:9 read the same; wrap wider on landscape.
+    let fontsize = (w.min(h) as f32 * s.font_scale.clamp(0.03, 0.16)) as u32;
+    let wrap_at = if w > h { s.wrap_chars * w as usize / h as usize } else { s.wrap_chars };
+    std::fs::write(&text_file, wrap(&shown, wrap_at))?;
     let y = match s.text_position.as_str() {
         "top" => format!("{}", h / 7),
         "bottom" => format!("h-text_h-{}", h / 6),
@@ -162,7 +164,7 @@ pub fn render_short(
     music: Option<(&Track, &MusicSettings)>,
     work: &Path,
     out: &Path,
-) -> Result<PathBuf> {
+) -> Result<Rendered> {
     if voices.len() != script.scenes.len() {
         return Err(Error::Config("one voice file per scene is required".into()));
     }
@@ -171,10 +173,12 @@ pub fn render_short(
     let work = &std::fs::canonicalize(work)?;
     let n = script.scenes.len();
     let mut clips = Vec::new();
+    let mut scene_seconds = Vec::new();
 
     for (i, (scene, voice_path)) in script.scenes.iter().zip(voices).enumerate() {
         let voice_len = voice::duration(voice_path).unwrap_or(0.0);
         let dur = scene.seconds.max(voice_len + 0.35);
+        scene_seconds.push((dur * 100.0).round() / 100.0);
         let (inputs, vf) = scene_graph(&scene.on_screen, i, n, dur, settings, work)?;
         let clip = work.join(format!("clip-{i:02}.mp4"));
         let mut args: Vec<String> = vec!["-y".into(), "-loglevel".into(), "error".into()];
@@ -232,7 +236,14 @@ pub fn render_short(
             out.display().to_string(),
         ])?;
     }
-    Ok(out.to_path_buf())
+    Ok(Rendered { file: out.to_path_buf(), scene_seconds })
+}
+
+/// A finished render and the real length of each scene.
+#[derive(Debug, Clone)]
+pub struct Rendered {
+    pub file: PathBuf,
+    pub scene_seconds: Vec<f32>,
 }
 
 #[cfg(test)]

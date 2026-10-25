@@ -3,7 +3,7 @@
 
 use crate::agents;
 use crate::config::Settings;
-use crate::model::{Idea, Stage, Video};
+use crate::model::{Idea, ProjectKind, Stage, Video};
 use crate::publish::Publisher;
 use crate::music;
 use crate::render;
@@ -27,7 +27,11 @@ impl Default for RunOptions {
 }
 
 pub fn new_video(store: &Store, idea: Idea) -> Result<Video> {
-    let v = Video { id: Store::new_id(), idea: Some(idea), created_at: Store::now(), ..Default::default() };
+    new_project(store, idea, ProjectKind::Short)
+}
+
+pub fn new_project(store: &Store, idea: Idea, kind: ProjectKind) -> Result<Video> {
+    let v = Video { id: Store::new_id(), kind, idea: Some(idea), created_at: Store::now(), ..Default::default() };
     store.save(&v)?;
     Ok(v)
 }
@@ -51,8 +55,22 @@ pub fn run_video(
 
     let result: Result<()> = (|| {
         if video.script.is_none() || video.stage == Stage::Idea {
-            step(&mut video, "Writing script".into());
-            let script = agents::write_script(router, &settings.context(), &idea, &[])?;
+            let script = if video.kind == ProjectKind::Long {
+                step(&mut video, "Outlining chapters".into());
+                let ctx = settings.context();
+                let outline = agents::outline(router, &ctx, &idea, settings.long_minutes)?;
+                let per = (settings.long_minutes.max(1) * 60) / outline.len() as u32;
+                let mut scenes = Vec::new();
+                for i in 0..outline.len() {
+                    step(&mut video, format!("Writing chapter {} of {}: {}", i + 1, outline.len(), outline[i].title));
+                    scenes.extend(agents::write_chapter(router, &ctx, &idea, &outline, i, per)?.scenes);
+                }
+                let (caption, hashtags) = agents::long_caption(router, &ctx, &idea, &outline)?;
+                crate::model::Script { scenes, caption, hashtags }
+            } else {
+                step(&mut video, "Writing script".into());
+                agents::write_script(router, &settings.context(), &idea, &[])?
+            };
             video.script = Some(script);
             video.stage = Stage::Script;
             store.save(&video)?;
@@ -61,7 +79,7 @@ pub fn run_video(
         if video.critique.is_none() {
             step(&mut video, "Running critic".into());
             let mut c = agents::critique(router, &settings.context(), &idea, video.script.as_ref().unwrap())?;
-            if opts.revise_below_min && c.score < settings.publish.min_score && !c.fixes.is_empty() {
+            if opts.revise_below_min && video.kind == ProjectKind::Short && c.score < settings.publish.min_score && !c.fixes.is_empty() {
                 step(&mut video, format!("Critic scored {}/10, rewriting with fixes", c.score));
                 let script = agents::write_script(router, &settings.context(), &idea, &c.fixes)?;
                 c = agents::critique(router, &settings.context(), &idea, &script)?;
@@ -101,8 +119,10 @@ pub fn run_video(
             let bed = video.music.as_ref().map(|t| (t, &settings.music));
             let mut style = settings.brand.apply(&settings.render);
             (style.width, style.height) = video.format().size();
-            let out = render::render_short(video.script.as_ref().unwrap(), &voices, &style, bed, &dir.join("work"), &dir.join("short.mp4"))?;
-            video.video_file = Some(out.display().to_string());
+            let name = if video.kind == ProjectKind::Long { "video.mp4" } else { "short.mp4" };
+            let out = render::render_short(video.script.as_ref().unwrap(), &voices, &style, bed, &dir.join("work"), &dir.join(name))?;
+            video.video_file = Some(out.file.display().to_string());
+            video.scene_seconds = out.scene_seconds;
             video.stage = Stage::Rendered;
             store.save(&video)?;
         }

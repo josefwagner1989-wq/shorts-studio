@@ -147,6 +147,9 @@ pub struct Scene {
     pub voiceover: String,
     #[serde(default)]
     pub visual: String,
+    /// Chapter this scene belongs to (long videos). Empty for Shorts.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub chapter: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -199,6 +202,9 @@ pub struct Video {
     pub music: Option<crate::music::Track>,
     #[serde(default)]
     pub legal: Option<LegalReview>,
+    /// Real length of each scene after rendering (seconds), for chapter timestamps.
+    #[serde(default)]
+    pub scene_seconds: Vec<f32>,
     #[serde(default)]
     pub log: Vec<String>,
     pub created_at: u64,
@@ -261,9 +267,52 @@ impl LegalReview {
     }
 }
 
-/// The full description: caption, hashtags, sources, music credit, AI disclosure.
+fn timestamp(secs: f32) -> String {
+    let t = secs.max(0.0).round() as u64;
+    if t >= 3600 {
+        format!("{}:{:02}:{:02}", t / 3600, (t / 60) % 60, t % 60)
+    } else {
+        format!("{:02}:{:02}", t / 60, t % 60)
+    }
+}
+
+/// YouTube chapter lines from scene chapters and rendered scene lengths.
+/// Empty unless YouTube would accept them: first at 00:00, at least 3, each at least 10 s.
+pub fn chapter_lines(script: &Script, scene_seconds: &[f32]) -> Vec<String> {
+    if scene_seconds.len() != script.scenes.len() {
+        return Vec::new();
+    }
+    let mut marks: Vec<(f32, String)> = Vec::new();
+    let mut t = 0.0;
+    for (scene, len) in script.scenes.iter().zip(scene_seconds) {
+        let ch = scene.chapter.trim();
+        if !ch.is_empty() && marks.last().map(|m| m.1.as_str()) != Some(ch) {
+            marks.push((t, ch.to_string()));
+        }
+        t += len;
+    }
+    let total = t;
+    if marks.len() < 3 || marks[0].0 > 0.5 {
+        return Vec::new();
+    }
+    let long_enough = marks.iter().enumerate().all(|(i, (start, _))| {
+        let end = marks.get(i + 1).map(|m| m.0).unwrap_or(total);
+        end - start >= 10.0
+    });
+    if !long_enough {
+        return Vec::new();
+    }
+    marks.into_iter().map(|(start, title)| format!("{} {title}", timestamp(start))).collect()
+}
+
+/// The full description: caption, chapters, sources, music credit, AI disclosure, hashtags.
 pub fn description(video: &Video, script: &Script) -> String {
     let mut out = script.caption.trim().to_string();
+    let chapters = chapter_lines(script, &video.scene_seconds);
+    if !chapters.is_empty() {
+        out.push_str("\n\nChapters:\n");
+        out.push_str(&chapters.join("\n"));
+    }
     if !video.sources.is_empty() {
         out.push_str("\n\nSources:");
         for s in &video.sources {
@@ -294,6 +343,19 @@ mod tests {
         let long = Video { kind: ProjectKind::Long, ..Default::default() };
         assert_eq!(long.format().size(), (1920, 1080));
         assert_eq!(Format::Banner.safe_margin(), 508);
+    }
+
+    #[test]
+    fn chapters_follow_youtube_rules() {
+        let sc = |ch: &str| Scene { seconds: 0.0, on_screen: String::new(), voiceover: String::new(), visual: String::new(), chapter: ch.into() };
+        let script = Script { scenes: vec![sc("Intro"), sc("Intro"), sc("Why"), sc("How")], caption: String::new(), hashtags: vec![] };
+        assert_eq!(chapter_lines(&script, &[6.0, 6.0, 15.0, 70.0]), vec!["00:00 Intro", "00:12 Why", "00:27 How"]);
+        // a chapter shorter than 10 s → no chapters at all
+        assert!(chapter_lines(&script, &[3.0, 3.0, 15.0, 70.0]).is_empty());
+        // fewer than 3 chapters → none
+        let two = Script { scenes: vec![sc("A"), sc("B")], ..script.clone() };
+        assert!(chapter_lines(&two, &[30.0, 30.0]).is_empty());
+        assert_eq!(timestamp(3725.0), "1:02:05");
     }
 
     #[test]
