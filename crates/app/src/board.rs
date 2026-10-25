@@ -225,7 +225,7 @@ fn open_detail(state: &Rc<State>, id: &str) {
 
     if let Some(m) = &v.music {
         body.append(&label("Music", &["heading"]));
-        body.append(&label(&m.credit(), &[]));
+        body.append(&label(&m.music_credit(), &[]));
     }
 
     if let Some(l) = &v.legal {

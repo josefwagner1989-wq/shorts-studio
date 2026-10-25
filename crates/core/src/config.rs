@@ -236,6 +236,20 @@ impl Settings {
         Ok(dirs.config_dir().join("settings.json"))
     }
 
+    /// The asset library: `<data>/assets/{music,images,fonts}`.
+    pub fn assets_path(&self) -> Result<PathBuf> {
+        Ok(self.data_path()?.join("assets"))
+    }
+
+    /// The music folder in use: the one set in Preferences, else the library's.
+    pub fn music_folder(&self) -> Result<PathBuf> {
+        if self.music.folder.trim().is_empty() {
+            Ok(self.assets_path()?.join("music"))
+        } else {
+            Ok(PathBuf::from(self.music.folder.trim()))
+        }
+    }
+
     pub fn data_path(&self) -> Result<PathBuf> {
         if !self.data_dir.is_empty() {
             return Ok(PathBuf::from(&self.data_dir));

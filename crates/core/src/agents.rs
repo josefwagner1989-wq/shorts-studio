@@ -77,7 +77,7 @@ Reply with JSON: {{\"score\": integer 1-10, \"originalityRisk\": \"low\"|\"mediu
 /// Critical and legal screening of a finished script, its description, sources and music.
 /// A screening to catch problems early — not legal advice.
 pub fn legal_review(router: &Router, context: &str, video: &crate::model::Video, script: &Script) -> Result<crate::model::LegalReview> {
-    let music = video.music.as_ref().map(|m| m.credit()).unwrap_or_else(|| "(no music)".into());
+    let music = video.music.as_ref().map(|m| m.music_credit()).unwrap_or_else(|| "(no music)".into());
     let prompt = format!(
         "TASK: LEGAL\nYou screen YouTube Shorts for legal and policy risk before publishing. Be strict and concrete; this is a risk screening, not legal advice.\n\
 Channel strategy:\n{}\n\nTitle: {}\nScript: {}\nDescription as it will be published:\n{}\nMusic: {}\n\n\

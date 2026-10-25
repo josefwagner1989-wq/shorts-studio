@@ -36,6 +36,10 @@ fn main() -> glib::ExitCode {
 
 fn build_ui(app: &adw::Application) {
     let settings = Settings::load_or_default().unwrap_or_default();
+    // Create the asset library folders (music, images, fonts) so they are easy to find.
+    if let Ok(p) = settings.assets_path() {
+        let _ = shorts_core::assets::Library::new(p).ensure();
+    }
 
     let header = adw::HeaderBar::new();
     let plan_btn = gtk::Button::builder().label("Plan ideas").css_classes(["suggested-action"]).build();

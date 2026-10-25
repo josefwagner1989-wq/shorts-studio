@@ -83,10 +83,10 @@ pub fn run_video(
 
         if video.stage == Stage::Voiced {
             if settings.music.enabled && video.music.is_none() {
-                match music::scan(std::path::Path::new(&settings.music.folder)) {
+                match settings.music_folder().and_then(|f| music::scan(&f)) {
                     Ok(tracks) => match music::pick(&tracks, &video.id) {
                         Some(t) => {
-                            step(&mut video, format!("Music: {}", t.credit()));
+                            step(&mut video, format!("Music: {}", t.music_credit()));
                             video.music = Some(t.clone());
                         }
                         None => step(&mut video, "No licensed tracks in the music folder; rendering without music".into()),

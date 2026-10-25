@@ -185,7 +185,7 @@ fn selftest(dir: Option<&str>) -> Result<()> {
         "{}",
         serde_json::json!({"ok": done.stage == Stage::Published, "stage": done.stage.label(), "video": file,
                            "seconds": secs, "voice": format!("{:?}", s.voice), "published": done.published_url,
-                           "music": done.music.as_ref().map(|m| m.credit()),
+                           "music": done.music.as_ref().map(|m| m.music_credit()),
                            "legal": done.legal.as_ref().map(|l| l.overall.clone())})
     );
     if done.stage != Stage::Published || secs < 5.0 {

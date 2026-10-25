@@ -45,7 +45,7 @@ Someone installs the Flatpak, adds one API key in Preferences and presses **Plan
 - [ ] Tag `v0.1.0-beta` with release notes
 
 ## After the beta (details in docs/VIBE_PROMPT.md §5)
-- [ ] M1 Foundation: Project model, formats, brand kit, asset library, sidebar navigation
+- [ ] M1 Foundation: ~~project kinds + formats~~ ✓, ~~brand kit~~ ✓, ~~asset library~~ ✓, sidebar navigation
 - [ ] M2 Long video: chapters, 16:9, B-roll, captions + SRT
 - [ ] M3 Presentations: SVG slides → PDF/PNG, narrated MP4
 - [ ] M4 Design: thumbnails, posts, banners

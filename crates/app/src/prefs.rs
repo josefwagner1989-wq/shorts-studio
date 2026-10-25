@@ -299,16 +299,12 @@ pub fn open(state: &Rc<State>) {
         .description("Use a folder of tracks you are allowed to use (YouTube Audio Library, Pixabay Music, Free Music Archive CC0/CC BY). Each file needs license info: a sidecar <file>.json with title, artist, license and url, or one library.json. Tracks without a license are never used. The credit goes into the description.")
         .build();
     let m_enabled = adw::SwitchRow::builder().title("Add background music").active(s.music.enabled).build();
-    let m_folder = entry("Music folder", &s.music.folder);
+    let m_folder = entry("Music folder (empty = asset library)", &s.music.folder);
     let m_volume = spin("Music level (dB)", -40.0, 0.0, 1.0, s.music.volume_db as f64, 0);
     let m_duck = adw::SwitchRow::builder().title("Lower music while the voice speaks").active(s.music.ducking).build();
-    let count = if s.music.folder.is_empty() {
-        "No folder set".to_string()
-    } else {
-        match shorts_core::music::scan(std::path::Path::new(&s.music.folder)) {
-            Ok(t) => format!("{} licensed track(s) found", t.len()),
-            Err(e) => e.to_string(),
-        }
+    let count = match s.music_folder().and_then(|f| shorts_core::music::scan(&f).map(|t| (f, t))) {
+        Ok((f, t)) => format!("{} licensed track(s) in {}", t.len(), f.display()),
+        Err(e) => e.to_string(),
     };
     let m_count = adw::ActionRow::builder().title("Library").subtitle(count.as_str()).build();
     for w in [m_enabled.upcast_ref::<gtk::Widget>(), m_folder.upcast_ref(), m_volume.upcast_ref(), m_duck.upcast_ref(), m_count.upcast_ref()] {

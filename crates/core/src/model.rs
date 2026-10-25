@@ -271,7 +271,7 @@ pub fn description(video: &Video, script: &Script) -> String {
         }
     }
     if let Some(m) = &video.music {
-        out.push_str(&format!("\n\n{}", m.credit()));
+        out.push_str(&format!("\n\n{}", m.music_credit()));
     }
     out.push_str("\n\nMade with AI assistance (script, voice).");
     let tags = script.hashtags.join(" ");
