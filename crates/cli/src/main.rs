@@ -176,6 +176,21 @@ fn selftest(dir: Option<&str>, kind: ProjectKind) -> Result<()> {
         s.music.folder = music_dir.display().to_string();
     }
 
+    // A generated test picture stands in for a licensed B-roll image.
+    let img_dir = s.assets_path()?.join("images");
+    std::fs::create_dir_all(&img_dir)?;
+    let pic = img_dir.join("test-pattern.png");
+    let made = std::process::Command::new("ffmpeg")
+        .args(["-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=1280x720", "-frames:v", "1"])
+        .arg(&pic)
+        .status()
+        .map(|st| st.success())
+        .unwrap_or(false);
+    if made {
+        std::fs::write(img_dir.join("test-pattern.png.json"),
+            r#"{"title":"Test pattern","artist":"Shorts Studio","license":"CC0","url":"https://creativecommons.org/publicdomain/zero/1.0/"}"#)?;
+    }
+
     let store = Store::open(&root)?;
     let router = Router::from_settings(&s)?;
     let ideas = agents::plan_ideas(&router, &s.context(), &[], 1)?;
@@ -193,6 +208,7 @@ fn selftest(dir: Option<&str>, kind: ProjectKind) -> Result<()> {
                            "music": done.music.as_ref().map(|m| m.music_credit()),
                            "legal": done.legal.as_ref().map(|l| l.overall.clone()),
                            "kind": kind.label(), "size": size, "chapters": chapters,
+                           "broll_scenes": done.images.iter().filter(|i| i.is_some()).count(),
                            "captions": done.srt_file.as_deref().and_then(|f| std::fs::read_to_string(f).ok()).map(|t| t.matches(" --> ").count()).unwrap_or(0)})
     );
     let (want_secs, want_size) = match kind {
@@ -206,6 +222,10 @@ fn selftest(dir: Option<&str>, kind: ProjectKind) -> Result<()> {
     let cues = done.srt_file.as_deref().and_then(|f| std::fs::read_to_string(f).ok()).map(|t| t.matches(" --> ").count()).unwrap_or(0);
     if cues == 0 {
         return Err(shorts_core::Error::Config("selftest failed: no captions in the .srt file".into()));
+    }
+    let description = done.script.as_ref().map(|sc| shorts_core::model::description(&done, sc)).unwrap_or_default();
+    if made && !description.contains("Image: \"Test pattern\"") {
+        return Err(shorts_core::Error::Config("selftest failed: B-roll image not credited in the description".into()));
     }
     if kind == ProjectKind::Long && chapters.len() < 3 {
         return Err(shorts_core::Error::Config(format!("selftest failed: expected at least 3 chapters, got {chapters:?}")));

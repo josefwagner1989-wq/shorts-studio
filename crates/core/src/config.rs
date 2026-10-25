@@ -108,6 +108,8 @@ pub struct RenderSettings {
     pub caption_scale: f32,
     /// Words per caption.
     pub caption_words: usize,
+    /// Use licensed images from the asset library as moving scene backgrounds.
+    pub broll: bool,
 }
 
 impl Default for RenderSettings {
@@ -133,6 +135,7 @@ impl Default for RenderSettings {
             captions: true,
             caption_scale: 0.05,
             caption_words: 5,
+            broll: true,
         }
     }
 }

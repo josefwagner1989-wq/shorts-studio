@@ -208,6 +208,9 @@ pub struct Video {
     /// Subtitles file (SubRip) written with the render.
     #[serde(default)]
     pub srt_file: Option<String>,
+    /// B-roll picture per scene (None = style background), credited in the description.
+    #[serde(default)]
+    pub images: Vec<Option<crate::assets::Asset>>,
     #[serde(default)]
     pub log: Vec<String>,
     pub created_at: u64,
@@ -324,6 +327,19 @@ pub fn description(video: &Video, script: &Script) -> String {
     }
     if let Some(m) = &video.music {
         out.push_str(&format!("\n\n{}", m.music_credit()));
+    }
+    let mut credited: Vec<String> = Vec::new();
+    for a in video.images.iter().flatten() {
+        let c = a.credit(crate::assets::AssetKind::Image);
+        if !credited.contains(&c) {
+            credited.push(c);
+        }
+    }
+    if !credited.is_empty() {
+        out.push_str("\n");
+        for c in credited {
+            out.push_str(&format!("\n{c}"));
+        }
     }
     out.push_str("\n\nMade with AI assistance (script, voice).");
     let tags = script.hashtags.join(" ");

@@ -116,11 +116,23 @@ pub fn run_video(
             let msg = format!("Rendering {:?} {fw}×{fh}", video.format());
             step(&mut video, msg);
             let voices: Vec<_> = video.voice_files.iter().map(std::path::PathBuf::from).collect();
+            if settings.render.broll && video.images.is_empty() {
+                let lib = crate::assets::Library::new(settings.assets_path()?);
+                let pics = lib.list(crate::assets::AssetKind::Image).unwrap_or_default();
+                if !pics.is_empty() {
+                    let n = video.script.as_ref().map(|s| s.scenes.len()).unwrap_or(0);
+                    video.images = (0..n).map(|i| crate::assets::pick(&pics, &format!("{}-{i}", video.id)).cloned()).collect();
+                    let msg = format!("B-roll: {} licensed image(s) across {n} scenes", pics.len());
+                    step(&mut video, msg);
+                }
+            }
+            let images: Vec<Option<std::path::PathBuf>> =
+                video.images.iter().map(|o| o.as_ref().map(|a| std::path::PathBuf::from(&a.file))).collect();
             let bed = video.music.as_ref().map(|t| (t, &settings.music));
             let mut style = settings.brand.apply(&settings.render);
             (style.width, style.height) = video.format().size();
             let name = if video.kind == ProjectKind::Long { "video.mp4" } else { "short.mp4" };
-            let out = render::render_short(video.script.as_ref().unwrap(), &voices, &style, bed, &dir.join("work"), &dir.join(name))?;
+            let out = render::render_short(video.script.as_ref().unwrap(), &voices, &style, bed, &images, &dir.join("work"), &dir.join(name))?;
             video.video_file = Some(out.file.display().to_string());
             video.scene_seconds = out.scene_seconds;
             video.srt_file = Some(out.srt_file.display().to_string());

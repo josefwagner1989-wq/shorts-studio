@@ -46,7 +46,7 @@ Someone installs the Flatpak, adds one API key in Preferences and presses **Plan
 
 ## After the beta (details in docs/VIBE_PROMPT.md §5)
 - [x] M1 Foundation: project kinds + formats, brand kit, asset library, sidebar navigation
-- [ ] M2 Long video: ~~outline → chapters → 16:9 render → YouTube chapters~~ ✓, ~~captions + SRT~~ ✓, B-roll, workspace UI
+- [ ] M2 Long video: ~~outline → chapters → 16:9 render → YouTube chapters~~ ✓, ~~captions + SRT~~ ✓, ~~Ken Burns B-roll with credits~~ ✓, workspace UI
 - [ ] M3 Presentations: SVG slides → PDF/PNG, narrated MP4
 - [ ] M4 Design: thumbnails, posts, banners
 - [ ] M5 Strategy: plan, calendar, briefs → projects, weekly review with YouTube stats

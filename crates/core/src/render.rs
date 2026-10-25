@@ -95,13 +95,35 @@ fn clean(p: &Path) -> String {
 
 /// ffmpeg inputs for the background and the video filter that draws the text.
 /// Input 0 is always the background; the caller adds audio as input 1.
-fn scene_graph(text: &str, cues: &[Cue], index: usize, count: usize, dur: f32, s: &RenderSettings, work: &Path) -> Result<(Vec<String>, String)> {
+// One flat argument list keeps the ffmpeg graph builder readable; a struct would only rename them.
+#[allow(clippy::too_many_arguments)]
+fn scene_graph(
+    text: &str,
+    cues: &[Cue],
+    image: Option<&Path>,
+    index: usize,
+    count: usize,
+    dur: f32,
+    s: &RenderSettings,
+    work: &Path,
+) -> Result<(Vec<String>, String)> {
     let (w, h) = (s.width, s.height);
     let mut inputs: Vec<String> = Vec::new();
     let mut chain: Vec<String> = Vec::new();
-    if !s.background_image.is_empty() && Path::new(&s.background_image).exists() {
-        inputs.extend(["-loop".into(), "1".into(), "-t".into(), format!("{dur:.2}"), "-i".into(), s.background_image.clone()]);
-        chain.push(format!("scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1,fps={}", s.fps));
+    // A scene's B-roll image wins over the style's background picture.
+    let style_image = Some(Path::new(&s.background_image)).filter(|p| !s.background_image.is_empty() && p.exists());
+    if let Some(img) = image.filter(|p| p.exists()).or(style_image) {
+        // Ken Burns: fill a 2x canvas, then zoom slowly from 1.0 to ~1.12 over the scene.
+        let frames = ((dur * s.fps as f32).ceil() as u32).max(1);
+        let inc = 0.12 / frames as f32;
+        inputs.extend(["-i".into(), img.display().to_string()]);
+        chain.push(format!(
+            "scale={w2}:{h2}:force_original_aspect_ratio=increase,crop={w2}:{h2},setsar=1,\
+zoompan=z='min(zoom+{inc:.6},1.12)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={w}x{h}:fps={fps}",
+            w2 = w * 2,
+            h2 = h * 2,
+            fps = s.fps,
+        ));
         let dim = s.background_dim.clamp(0.0, 0.9);
         if dim > 0.0 {
             chain.push(format!("drawbox=x=0:y=0:w=iw:h=ih:color=black@{dim:.2}:t=fill"));
@@ -166,7 +188,7 @@ pub fn preview_frame(text: &str, settings: &RenderSettings, work: &Path, out_png
     let work = &std::fs::canonicalize(work)?;
     let sample = [Cue { start: 0.0, end: 1.0, text: "Captions look like this".into() }];
     let cues: &[Cue] = if settings.captions { &sample } else { &[] };
-    let (inputs, vf) = scene_graph(text, cues, 1, 3, 1.0, settings, work)?;
+    let (inputs, vf) = scene_graph(text, cues, None, 1, 3, 1.0, settings, work)?;
     let mut args: Vec<String> = vec!["-y".into(), "-loglevel".into(), "error".into()];
     args.extend(inputs);
     args.extend(["-vf".into(), vf, "-frames:v".into(), "1".into(), out_png.display().to_string()]);
@@ -175,12 +197,14 @@ pub fn preview_frame(text: &str, settings: &RenderSettings, work: &Path, out_png
 }
 
 /// Renders `script` with one voice file per scene into `out` (MP4, H.264 + AAC).
+/// `images` holds an optional B-roll picture per scene (index = scene).
 /// Each scene lasts at least its scripted seconds and at least as long as its voiceover.
 pub fn render_short(
     script: &Script,
     voices: &[PathBuf],
     settings: &RenderSettings,
     music: Option<(&Track, &MusicSettings)>,
+    images: &[Option<PathBuf>],
     work: &Path,
     out: &Path,
 ) -> Result<Rendered> {
@@ -207,7 +231,8 @@ pub fn render_short(
         elapsed += dur;
         scene_seconds.push((dur * 100.0).round() / 100.0);
         let burned: &[Cue] = if settings.captions { &cues } else { &[] };
-        let (inputs, vf) = scene_graph(&scene.on_screen, burned, i, n, dur, settings, work)?;
+        let image = images.get(i).and_then(|o| o.as_deref());
+        let (inputs, vf) = scene_graph(&scene.on_screen, burned, image, i, n, dur, settings, work)?;
         let clip = work.join(format!("clip-{i:02}.mp4"));
         let mut args: Vec<String> = vec!["-y".into(), "-loglevel".into(), "error".into()];
         args.extend(inputs);
