@@ -94,7 +94,9 @@ pub fn run_video(
                     Err(e) => step(&mut video, format!("Music skipped: {e}")),
                 }
             }
-            step(&mut video, format!("Rendering {:?} {}×{}", video.format(), video.format().size().0, video.format().size().1));
+            let (fw, fh) = video.format().size();
+            let msg = format!("Rendering {:?} {fw}×{fh}", video.format());
+            step(&mut video, msg);
             let voices: Vec<_> = video.voice_files.iter().map(std::path::PathBuf::from).collect();
             let bed = video.music.as_ref().map(|t| (t, &settings.music));
             let mut style = settings.render.clone();
