@@ -13,8 +13,8 @@ Someone installs the Flatpak, adds one API key in Preferences and presses **Plan
 ## Checklist
 
 ### Mon 26 Oct
-- [ ] CI green: core, CLI and GTK app compile, unit tests pass
-- [ ] Offline selftest renders a playable MP4 in CI (artifact + frame.png)
+- [x] CI green: core, CLI and GTK app compile, unit tests pass
+- [x] Offline selftest renders a playable MP4 in CI (21 s, voice + music + legal check)
 - [ ] Commit the CI-generated `Cargo.lock`
 
 ### Sun 25 Oct (done today)

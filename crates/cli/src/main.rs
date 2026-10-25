@@ -137,12 +137,14 @@ fn run(args: &[String]) -> Result<()> {
 /// Offline end-to-end check used by CI and the daily test run.
 fn selftest(dir: Option<&str>) -> Result<()> {
     let root = std::path::PathBuf::from(dir.unwrap_or("selftest-out"));
-    let mut s = Settings::default();
-    s.data_dir = root.display().to_string();
-    s.providers = vec![ProviderConfig {
-        name: "mock".into(), kind: ProviderKind::Mock, model: "mock".into(),
-        api_key_env: None, base_url: None, daily_token_budget: 0, enabled: true,
-    }];
+    let mut s = Settings {
+        data_dir: root.display().to_string(),
+        providers: vec![ProviderConfig {
+            name: "mock".into(), kind: ProviderKind::Mock, model: "mock".into(),
+            api_key_env: None, base_url: None, daily_token_budget: 0, enabled: true,
+        }],
+        ..Default::default()
+    };
     s.roles.strategist = vec!["mock".into()];
     s.roles.writer = vec!["mock".into()];
     s.roles.critic = vec!["mock".into()];
