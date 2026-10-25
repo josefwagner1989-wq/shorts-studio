@@ -50,6 +50,86 @@ impl Stage {
     }
 }
 
+/// What a project produces. Old files without a kind load as `Short`.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ProjectKind {
+    #[default]
+    Short,
+    Long,
+    Deck,
+    Design,
+    Plan,
+}
+
+impl ProjectKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            ProjectKind::Short => "Short",
+            ProjectKind::Long => "Long video",
+            ProjectKind::Deck => "Presentation",
+            ProjectKind::Design => "Design",
+            ProjectKind::Plan => "Strategy plan",
+        }
+    }
+
+    /// The format a new project of this kind starts with.
+    pub fn default_format(self) -> Format {
+        match self {
+            ProjectKind::Short => Format::Vertical,
+            ProjectKind::Long | ProjectKind::Deck | ProjectKind::Plan => Format::Horizontal,
+            ProjectKind::Design => Format::Thumbnail,
+        }
+    }
+}
+
+/// Output canvas. Sizes follow YouTube's and common social specs.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum Format {
+    /// 9:16, 1080×1920 — Shorts.
+    Vertical,
+    /// 16:9, 1920×1080 — long videos and slides.
+    Horizontal,
+    /// 1:1, 1080×1080.
+    Square,
+    /// 4:5, 1080×1350 — feed posts.
+    Portrait,
+    /// 16:9, 1280×720 — YouTube thumbnail.
+    Thumbnail,
+    /// 2560×1440 — YouTube channel banner.
+    Banner,
+}
+
+impl Format {
+    pub fn size(self) -> (u32, u32) {
+        match self {
+            Format::Vertical => (1080, 1920),
+            Format::Horizontal => (1920, 1080),
+            Format::Square => (1080, 1080),
+            Format::Portrait => (1080, 1350),
+            Format::Thumbnail => (1280, 720),
+            Format::Banner => (2560, 1440),
+        }
+    }
+
+    /// Margin (px) that text should stay inside: covers platform UI overlays.
+    pub fn safe_margin(self) -> u32 {
+        let (w, h) = self.size();
+        match self {
+            // Shorts: captions, buttons and channel name overlay the edges.
+            Format::Vertical => w / 10,
+            // Banner: only the centre 1546×423 is visible on every device.
+            Format::Banner => (h - 423) / 2,
+            _ => w.min(h) / 20,
+        }
+    }
+
+    pub fn is_video(self) -> bool {
+        matches!(self, Format::Vertical | Format::Horizontal | Format::Square | Format::Portrait)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Idea {
     pub title: String,
@@ -97,6 +177,11 @@ pub struct Critique {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Video {
     pub id: String,
+    #[serde(default)]
+    pub kind: ProjectKind,
+    /// None = the kind's default format.
+    #[serde(default)]
+    pub format: Option<Format>,
     pub idea: Option<Idea>,
     pub stage: Stage,
     pub script: Option<Script>,
@@ -117,6 +202,12 @@ pub struct Video {
     #[serde(default)]
     pub log: Vec<String>,
     pub created_at: u64,
+}
+
+impl Video {
+    pub fn format(&self) -> Format {
+        self.format.unwrap_or_else(|| self.kind.default_format())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -191,6 +282,19 @@ pub fn description(video: &Video, script: &Script) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn old_video_files_load_as_vertical_shorts() {
+        let old = r#"{"id":"v1","idea":null,"stage":"rendered","script":null,"critique":null,
+                      "video_file":null,"published_url":null,"created_at":1}"#;
+        let v: Video = serde_json::from_str(old).unwrap();
+        assert_eq!(v.kind, ProjectKind::Short);
+        assert_eq!(v.format(), Format::Vertical);
+        assert_eq!(v.format().size(), (1080, 1920));
+        let long = Video { kind: ProjectKind::Long, ..Default::default() };
+        assert_eq!(long.format().size(), (1920, 1080));
+        assert_eq!(Format::Banner.safe_margin(), 508);
+    }
 
     #[test]
     fn source_lines_and_description() {

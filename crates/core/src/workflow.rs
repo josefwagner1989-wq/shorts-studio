@@ -94,10 +94,12 @@ pub fn run_video(
                     Err(e) => step(&mut video, format!("Music skipped: {e}")),
                 }
             }
-            step(&mut video, "Rendering 9:16 video".into());
+            step(&mut video, format!("Rendering {:?} {}×{}", video.format(), video.format().size().0, video.format().size().1));
             let voices: Vec<_> = video.voice_files.iter().map(std::path::PathBuf::from).collect();
             let bed = video.music.as_ref().map(|t| (t, &settings.music));
-            let out = render::render_short(video.script.as_ref().unwrap(), &voices, &settings.render, bed, &dir.join("work"), &dir.join("short.mp4"))?;
+            let mut style = settings.render.clone();
+            (style.width, style.height) = video.format().size();
+            let out = render::render_short(video.script.as_ref().unwrap(), &voices, &style, bed, &dir.join("work"), &dir.join("short.mp4"))?;
             video.video_file = Some(out.display().to_string());
             video.stage = Stage::Rendered;
             store.save(&video)?;
