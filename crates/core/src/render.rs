@@ -2,6 +2,7 @@
 //! picture, styled text, progress bar, voiceover), a lossless concat, then an
 //! optional royalty-free music bed ducked under the voice.
 
+use crate::captions::{self, Cue};
 use crate::config::{MusicSettings, RenderSettings};
 use crate::model::Script;
 use crate::music::Track;
@@ -94,7 +95,7 @@ fn clean(p: &Path) -> String {
 
 /// ffmpeg inputs for the background and the video filter that draws the text.
 /// Input 0 is always the background; the caller adds audio as input 1.
-fn scene_graph(text: &str, index: usize, count: usize, dur: f32, s: &RenderSettings, work: &Path) -> Result<(Vec<String>, String)> {
+fn scene_graph(text: &str, cues: &[Cue], index: usize, count: usize, dur: f32, s: &RenderSettings, work: &Path) -> Result<(Vec<String>, String)> {
     let (w, h) = (s.width, s.height);
     let mut inputs: Vec<String> = Vec::new();
     let mut chain: Vec<String> = Vec::new();
@@ -135,6 +136,22 @@ fn scene_graph(text: &str, index: usize, count: usize, dur: f32, s: &RenderSetti
         fg = s.text_color,
         ls = fontsize / 4,
     ));
+    // Timed captions: one drawtext per cue, shown only during its time span.
+    let cap_size = (w.min(h) as f32 * s.caption_scale.clamp(0.02, 0.1)) as u32;
+    let cap_y = if s.text_position == "bottom" { format!("{}", h / 7) } else { format!("h-text_h-{}", h / 9) };
+    for (k, c) in cues.iter().enumerate() {
+        let cf = work.join(format!("cap-{index:02}-{k:02}.txt"));
+        std::fs::write(&cf, wrap(&c.text, if w > h { 48 } else { 26 }))?;
+        chain.push(format!(
+            "drawtext={font_arg}:textfile='{tf}':fontsize={cap_size}:fontcolor=white:borderw={bw}:bordercolor=black@0.85:\
+line_spacing={ls}:x=(w-text_w)/2:y={cap_y}:enable='between(t,{a:.3},{b:.3})'",
+            tf = clean(&cf),
+            bw = (cap_size / 12).max(2),
+            ls = cap_size / 5,
+            a = c.start,
+            b = c.end,
+        ));
+    }
     if s.progress_bar && count > 0 {
         let bar_w = (w as f32 * (index + 1) as f32 / count as f32) as u32;
         chain.push(format!("drawbox=x=0:y={}:w={bar_w}:h=14:color={}:t=fill", h - 14, s.accent));
@@ -147,7 +164,9 @@ fn scene_graph(text: &str, index: usize, count: usize, dur: f32, s: &RenderSetti
 pub fn preview_frame(text: &str, settings: &RenderSettings, work: &Path, out_png: &Path) -> Result<PathBuf> {
     std::fs::create_dir_all(work)?;
     let work = &std::fs::canonicalize(work)?;
-    let (inputs, vf) = scene_graph(text, 1, 3, 1.0, settings, work)?;
+    let sample = [Cue { start: 0.0, end: 1.0, text: "Captions look like this".into() }];
+    let cues: &[Cue] = if settings.captions { &sample } else { &[] };
+    let (inputs, vf) = scene_graph(text, cues, 1, 3, 1.0, settings, work)?;
     let mut args: Vec<String> = vec!["-y".into(), "-loglevel".into(), "error".into()];
     args.extend(inputs);
     args.extend(["-vf".into(), vf, "-frames:v".into(), "1".into(), out_png.display().to_string()]);
@@ -174,12 +193,21 @@ pub fn render_short(
     let n = script.scenes.len();
     let mut clips = Vec::new();
     let mut scene_seconds = Vec::new();
+    let mut all_cues: Vec<Cue> = Vec::new();
+    let mut elapsed = 0.0f32;
 
     for (i, (scene, voice_path)) in script.scenes.iter().zip(voices).enumerate() {
         let voice_len = voice::duration(voice_path).unwrap_or(0.0);
         let dur = scene.seconds.max(voice_len + 0.35);
+        // Captions start slightly after the scene starts; the voice is placed at 0 too.
+        let cues = captions::scene_cues(&scene.voiceover, voice_len, settings.caption_words);
+        for c in &cues {
+            all_cues.push(Cue { start: elapsed + c.start, end: elapsed + c.end, text: c.text.clone() });
+        }
+        elapsed += dur;
         scene_seconds.push((dur * 100.0).round() / 100.0);
-        let (inputs, vf) = scene_graph(&scene.on_screen, i, n, dur, settings, work)?;
+        let burned: &[Cue] = if settings.captions { &cues } else { &[] };
+        let (inputs, vf) = scene_graph(&scene.on_screen, burned, i, n, dur, settings, work)?;
         let clip = work.join(format!("clip-{i:02}.mp4"));
         let mut args: Vec<String> = vec!["-y".into(), "-loglevel".into(), "error".into()];
         args.extend(inputs);
@@ -236,7 +264,9 @@ pub fn render_short(
             out.display().to_string(),
         ])?;
     }
-    Ok(Rendered { file: out.to_path_buf(), scene_seconds })
+    let srt_file = out.with_extension("srt");
+    std::fs::write(&srt_file, captions::srt(&all_cues))?;
+    Ok(Rendered { file: out.to_path_buf(), scene_seconds, srt_file })
 }
 
 /// A finished render and the real length of each scene.
@@ -244,6 +274,8 @@ pub fn render_short(
 pub struct Rendered {
     pub file: PathBuf,
     pub scene_seconds: Vec<f32>,
+    /// Subtitles for the whole video (SubRip), next to the video file.
+    pub srt_file: PathBuf,
 }
 
 #[cfg(test)]

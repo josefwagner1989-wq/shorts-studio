@@ -8,6 +8,7 @@
 pub mod agents;
 pub mod assets;
 pub mod brand;
+pub mod captions;
 pub mod config;
 pub mod error;
 pub mod jsonx;

@@ -123,6 +123,7 @@ pub fn run_video(
             let out = render::render_short(video.script.as_ref().unwrap(), &voices, &style, bed, &dir.join("work"), &dir.join(name))?;
             video.video_file = Some(out.file.display().to_string());
             video.scene_seconds = out.scene_seconds;
+            video.srt_file = Some(out.srt_file.display().to_string());
             video.stage = Stage::Rendered;
             store.save(&video)?;
         }

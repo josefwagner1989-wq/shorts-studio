@@ -102,6 +102,12 @@ pub struct RenderSettings {
     pub wrap_chars: usize,
     /// Progress bar along the bottom edge.
     pub progress_bar: bool,
+    /// Burn timed captions of the voiceover into the video.
+    pub captions: bool,
+    /// Caption height as a share of the short side.
+    pub caption_scale: f32,
+    /// Words per caption.
+    pub caption_words: usize,
 }
 
 impl Default for RenderSettings {
@@ -124,6 +130,9 @@ impl Default for RenderSettings {
             uppercase: false,
             wrap_chars: 16,
             progress_bar: true,
+            captions: true,
+            caption_scale: 0.05,
+            caption_words: 5,
         }
     }
 }

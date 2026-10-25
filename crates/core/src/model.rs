@@ -205,6 +205,9 @@ pub struct Video {
     /// Real length of each scene after rendering (seconds), for chapter timestamps.
     #[serde(default)]
     pub scene_seconds: Vec<f32>,
+    /// Subtitles file (SubRip) written with the render.
+    #[serde(default)]
+    pub srt_file: Option<String>,
     #[serde(default)]
     pub log: Vec<String>,
     pub created_at: u64,

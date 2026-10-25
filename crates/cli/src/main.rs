@@ -192,7 +192,8 @@ fn selftest(dir: Option<&str>, kind: ProjectKind) -> Result<()> {
                            "seconds": secs, "voice": format!("{:?}", s.voice), "published": done.published_url,
                            "music": done.music.as_ref().map(|m| m.music_credit()),
                            "legal": done.legal.as_ref().map(|l| l.overall.clone()),
-                           "kind": kind.label(), "size": size, "chapters": chapters})
+                           "kind": kind.label(), "size": size, "chapters": chapters,
+                           "captions": done.srt_file.as_deref().and_then(|f| std::fs::read_to_string(f).ok()).map(|t| t.matches(" --> ").count()).unwrap_or(0)})
     );
     let (want_secs, want_size) = match kind {
         ProjectKind::Long => (60.0, "1920x1080"),
@@ -201,6 +202,10 @@ fn selftest(dir: Option<&str>, kind: ProjectKind) -> Result<()> {
     if done.stage != Stage::Published || secs < want_secs || size != want_size {
         return Err(shorts_core::Error::Config(format!(
             "selftest failed: stage {}, {secs:.1} s (need {want_secs}), size {size} (need {want_size})", done.stage.label())));
+    }
+    let cues = done.srt_file.as_deref().and_then(|f| std::fs::read_to_string(f).ok()).map(|t| t.matches(" --> ").count()).unwrap_or(0);
+    if cues == 0 {
+        return Err(shorts_core::Error::Config("selftest failed: no captions in the .srt file".into()));
     }
     if kind == ProjectKind::Long && chapters.len() < 3 {
         return Err(shorts_core::Error::Config(format!("selftest failed: expected at least 3 chapters, got {chapters:?}")));

@@ -36,6 +36,9 @@ impl Publisher for Outbox {
         let target = self.dir.join(format!("{}.mp4", video.id));
         std::fs::copy(file, &target)?;
         std::fs::write(self.dir.join(format!("{}.txt", video.id)), description(video, script))?;
+        if let Some(srt) = video.srt_file.as_deref().filter(|p| Path::new(p).exists()) {
+            std::fs::copy(srt, self.dir.join(format!("{}.srt", video.id)))?;
+        }
         Ok(target.display().to_string())
     }
 }

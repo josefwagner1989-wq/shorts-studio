@@ -25,6 +25,7 @@ struct StyleRows {
     dim: adw::SpinRow,
     accent: adw::EntryRow,
     progress: adw::SwitchRow,
+    captions: adw::SwitchRow,
 }
 
 const POSITIONS: [&str; 3] = ["top", "center", "bottom"];
@@ -47,6 +48,7 @@ impl StyleRows {
             background_dim: self.dim.value() as f32,
             accent: if t(&self.accent).is_empty() { "white".into() } else { t(&self.accent) },
             progress_bar: self.progress.is_active(),
+            captions: self.captions.is_active(),
             ..base.clone()
         }
     }
@@ -245,11 +247,13 @@ pub fn open(state: &Rc<State>) {
         dim: spin("Darken picture", 0.0, 0.9, 0.05, r.background_dim as f64, 2),
         accent: entry("Accent colour (progress bar)", &r.accent),
         progress: adw::SwitchRow::builder().title("Progress bar").active(r.progress_bar).build(),
+        captions: adw::SwitchRow::builder().title("Captions").subtitle("Timed subtitles of the voiceover, plus an .srt file").active(r.captions).build(),
     });
     let tg = adw::PreferencesGroup::builder().title("Text").build();
     for w in [st_rows.font_file.upcast_ref::<gtk::Widget>(), st_rows.font_scale.upcast_ref(), st_rows.position.upcast_ref(),
               st_rows.uppercase.upcast_ref(), st_rows.wrap.upcast_ref(), st_rows.text_color.upcast_ref(),
-              st_rows.text_box.upcast_ref(), st_rows.box_color.upcast_ref(), st_rows.box_opacity.upcast_ref()] {
+              st_rows.text_box.upcast_ref(), st_rows.box_color.upcast_ref(), st_rows.box_opacity.upcast_ref(),
+              st_rows.captions.upcast_ref()] {
         tg.add(w);
     }
     let bg = adw::PreferencesGroup::builder().title("Background").build();
