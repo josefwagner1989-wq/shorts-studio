@@ -1,9 +1,10 @@
-//! Shorts Studio — GTK4 / libadwaita front end over `shorts-core`.
+//! Creator Studio — GTK4 / libadwaita front end over `shorts-core`.
 //! Long work (model calls, voice, ffmpeg, uploads) runs on worker threads via
 //! `gio::spawn_blocking`; the UI only reads and writes the store.
 
 mod board;
 mod prefs;
+mod workspaces;
 
 use adw::prelude::*;
 use gtk::glib;
@@ -41,13 +42,12 @@ fn build_ui(app: &adw::Application) {
         let _ = shorts_core::assets::Library::new(p).ensure();
     }
 
+    // Shorts workspace: header with its actions, and the pipeline board.
     let header = adw::HeaderBar::new();
     let plan_btn = gtk::Button::builder().label("Plan ideas").css_classes(["suggested-action"]).build();
-    let run_btn = gtk::Button::builder().label("Produce all").tooltip_text("Script, voice and render every unfinished video").build();
-    let prefs_btn = gtk::Button::builder().icon_name("emblem-system-symbolic").tooltip_text("Preferences").build();
+    let run_btn = gtk::Button::builder().label("Produce all").tooltip_text("Script, voice and render every unfinished Short").build();
     header.pack_start(&plan_btn);
     header.pack_start(&run_btn);
-    header.pack_end(&prefs_btn);
 
     let board = gtk::Box::builder()
         .orientation(gtk::Orientation::Horizontal)
@@ -62,20 +62,55 @@ fn build_ui(app: &adw::Application) {
         .vexpand(true)
         .build();
 
-    let toasts = adw::ToastOverlay::new();
-    toasts.set_child(Some(&scroller));
+    let stack = gtk::Stack::builder().transition_type(gtk::StackTransitionType::Crossfade).build();
+    stack.add_named(&scroller, Some("shorts"));
+    for ws in workspaces::PLANNED {
+        stack.add_named(&workspaces::planned_page(ws), Some(ws.id));
+    }
+    let assets_box = gtk::Box::builder().orientation(gtk::Orientation::Vertical).build();
+    stack.add_named(&assets_box, Some("assets"));
 
-    let view = adw::ToolbarView::new();
-    view.add_top_bar(&header);
-    view.set_content(Some(&toasts));
+    let content_view = adw::ToolbarView::new();
+    content_view.add_top_bar(&header);
+    content_view.set_content(Some(&stack));
+    let content_page = adw::NavigationPage::new(&content_view, "Shorts");
+
+    // Sidebar
+    let side_header = adw::HeaderBar::new();
+    let prefs_btn = gtk::Button::builder().icon_name("emblem-system-symbolic").tooltip_text("Preferences").build();
+    side_header.pack_end(&prefs_btn);
+    let nav = gtk::ListBox::builder().css_classes(["navigation-sidebar"]).build();
+    for (id, title, icon) in workspaces::SIDEBAR {
+        let row = gtk::Box::builder().spacing(12).margin_top(6).margin_bottom(6).margin_start(6).build();
+        row.append(&gtk::Image::from_icon_name(icon));
+        row.append(&gtk::Label::new(Some(*title)));
+        let lbr = gtk::ListBoxRow::builder().child(&row).name(*id).build();
+        nav.append(&lbr);
+    }
+    let side_view = adw::ToolbarView::new();
+    side_view.add_top_bar(&side_header);
+    side_view.set_content(Some(&gtk::ScrolledWindow::builder().child(&nav).vexpand(true).build()));
+    let side_page = adw::NavigationPage::new(&side_view, "Creator Studio");
+
+    let split = adw::NavigationSplitView::new();
+    split.set_sidebar(Some(&side_page));
+    split.set_content(Some(&content_page));
+    split.set_min_sidebar_width(200.0);
+
+    let toasts = adw::ToastOverlay::new();
+    toasts.set_child(Some(&split));
 
     let window = adw::ApplicationWindow::builder()
         .application(app)
-        .title("Shorts Studio")
-        .default_width(1280)
-        .default_height(780)
-        .content(&view)
+        .title("Creator Studio")
+        .default_width(1360)
+        .default_height(800)
+        .content(&toasts)
         .build();
+    let bp = adw::Breakpoint::new(adw::BreakpointCondition::new_length(
+        adw::BreakpointConditionLengthType::MaxWidth, 720.0, adw::LengthUnit::Sp));
+    bp.add_setter(&split, "collapsed", Some(&true.to_value()));
+    window.add_breakpoint(bp);
 
     let state = Rc::new(State {
         settings: RefCell::new(settings),
@@ -86,6 +121,28 @@ fn build_ui(app: &adw::Application) {
     });
 
     board::refresh(&state);
+
+    {
+        let (st, stack, page, plan_btn, run_btn, split, assets_box) =
+            (state.clone(), stack.clone(), content_page.clone(), plan_btn.clone(), run_btn.clone(), split.clone(), assets_box.clone());
+        nav.connect_row_selected(move |_, row| {
+            let Some(row) = row else { return };
+            let id = row.widget_name().to_string();
+            let title = workspaces::SIDEBAR.iter().find(|w| w.0 == id).map(|w| w.1).unwrap_or("Creator Studio");
+            page.set_title(title);
+            let is_shorts = id == "shorts";
+            plan_btn.set_visible(is_shorts);
+            run_btn.set_visible(is_shorts);
+            if id == "assets" {
+                workspaces::fill_assets(&st, &assets_box);
+            }
+            stack.set_visible_child_name(&id);
+            split.set_show_content(true);
+        });
+    }
+    if let Some(first) = nav.row_at_index(1) {
+        nav.select_row(Some(&first));
+    }
 
     {
         let st = state.clone();

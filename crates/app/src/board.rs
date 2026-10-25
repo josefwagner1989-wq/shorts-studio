@@ -4,7 +4,7 @@ use crate::State;
 use adw::prelude::*;
 use gtk::{gio, glib};
 use shorts_core::config::Settings;
-use shorts_core::model::{Stage, Video};
+use shorts_core::model::{ProjectKind, Stage, Video};
 use shorts_core::router::Router;
 use shorts_core::store::Store;
 use shorts_core::{agents, publish, workflow, Error, Result};
@@ -41,7 +41,12 @@ pub fn refresh(state: &Rc<State>) {
     while let Some(child) = state.board.first_child() {
         state.board.remove(&child);
     }
-    let videos = store_for(&state.settings.borrow()).and_then(|s| s.list()).unwrap_or_default();
+    let videos: Vec<Video> = store_for(&state.settings.borrow())
+        .and_then(|s| s.list())
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|v| v.kind == ProjectKind::Short)
+        .collect();
 
     for stage in Stage::BOARD.iter().copied().chain(std::iter::once(Stage::Failed)) {
         let items: Vec<&Video> = videos.iter().filter(|v| v.stage == stage).collect();
@@ -144,7 +149,7 @@ pub fn produce_all(state: &Rc<State>, btn: gtk::Button) {
         .and_then(|s| s.list())
         .unwrap_or_default()
         .into_iter()
-        .filter(|v| matches!(v.stage, Stage::Idea | Stage::Script | Stage::Voiced))
+        .filter(|v| v.kind == ProjectKind::Short && matches!(v.stage, Stage::Idea | Stage::Script | Stage::Voiced))
         .map(|v| v.id)
         .collect();
     if ids.is_empty() {
