@@ -1,9 +1,9 @@
 //! Royalty-free music library.
 //!
 //! Put audio files (mp3, ogg, opus, m4a, flac, wav) in one folder. Each track
-//! needs license information, or it is never used:
-//!   - a sidecar `<file>.json`: {"title", "artist", "license", "url"}, or
-//!   - one `library.json` in the folder: [{"file", "title", "artist", "license", "url"}, ...]
+//! needs license information, or it is never used. Give it either a sidecar
+//! `<file>.json` with `{"title", "artist", "license", "url"}`, or an entry in one
+//! `library.json` in the folder: `[{"file", "title", "artist", "license", "url"}, ...]`.
 //! Typical sources: YouTube Audio Library, Pixabay Music, Free Music Archive (CC0 / CC BY).
 //! The credit line goes into the video description automatically.
 

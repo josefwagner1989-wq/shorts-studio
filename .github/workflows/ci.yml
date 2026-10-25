@@ -17,6 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: System packages
+        timeout-minutes: 10
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libgtk-4-dev libadwaita-1-dev ffmpeg espeak-ng fonts-dejavu-core
@@ -33,9 +34,11 @@ jobs:
         continue-on-error: true
       - name: End-to-end selftest (mock models → voice → render → outbox)
         run: |
+          set -o pipefail
           ci/run.sh selftest cargo run -p shorts-cli -- selftest selftest-out | tee selftest.out
           tail -1 selftest.out > selftest.json
           echo "::notice title=selftest::$(cat selftest.json)"
+          grep -q '"ok":true' selftest.json
       - name: Grab a frame for review
         if: always()
         run: |

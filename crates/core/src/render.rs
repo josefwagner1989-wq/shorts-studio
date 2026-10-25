@@ -144,6 +144,7 @@ fn scene_graph(text: &str, index: usize, count: usize, dur: f32, s: &RenderSetti
 /// Renders one still frame of a scene for the style editor preview.
 pub fn preview_frame(text: &str, settings: &RenderSettings, work: &Path, out_png: &Path) -> Result<PathBuf> {
     std::fs::create_dir_all(work)?;
+    let work = &std::fs::canonicalize(work)?;
     let (inputs, vf) = scene_graph(text, 1, 3, 1.0, settings, work)?;
     let mut args: Vec<String> = vec!["-y".into(), "-loglevel".into(), "error".into()];
     args.extend(inputs);
@@ -166,6 +167,8 @@ pub fn render_short(
         return Err(Error::Config("one voice file per scene is required".into()));
     }
     std::fs::create_dir_all(work)?;
+    // Absolute paths: ffmpeg resolves concat-list entries relative to the list file.
+    let work = &std::fs::canonicalize(work)?;
     let n = script.scenes.len();
     let mut clips = Vec::new();
 
