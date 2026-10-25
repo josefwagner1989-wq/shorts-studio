@@ -1,4 +1,8 @@
-# Roadmap to the beta (Friday 30 October 2026)
+# Roadmap
+
+The full product spec, architecture and way of working are in [docs/VIBE_PROMPT.md](docs/VIBE_PROMPT.md). This file tracks progress.
+
+## M0 — Beta (Friday 30 October 2026)
 
 A daily check runs at 11:30 (Europe/Berlin). It reads CI, fixes what broke, takes the next unchecked item, pushes, and reports by 12:00.
 
@@ -12,6 +16,14 @@ Someone installs the Flatpak, adds one API key in Preferences and presses **Plan
 - [ ] CI green: core, CLI and GTK app compile, unit tests pass
 - [ ] Offline selftest renders a playable MP4 in CI (artifact + frame.png)
 - [ ] Commit the CI-generated `Cargo.lock`
+
+### Sun 25 Oct (done today)
+- [x] Style editor with live preview frame
+- [x] Royalty-free music library with ducking and automatic credits
+- [x] Sources per video, listed in the description
+- [x] Legal & critical check button; blocks auto-publish on high risk
+- [x] YouTube channel shown after sign-in; stats API ready
+- [x] Flatpak installer bundle + release job + install.sh
 
 ### Tue 27 Oct
 - [ ] Unit tests for `store`, `secrets` (0600 permissions, masking), `workflow` resume after a failed step
@@ -32,7 +44,10 @@ Someone installs the Flatpak, adds one API key in Preferences and presses **Plan
 - [ ] Fresh-install test from the Flatpak bundle
 - [ ] Tag `v0.1.0-beta` with release notes
 
-## After the beta
-- Secret Service portal (oo7) instead of `secrets.json`
-- Offline Flathub build (cargo-sources.json)
-- Background music and B-roll images
+## After the beta (details in docs/VIBE_PROMPT.md §5)
+- [ ] M1 Foundation: Project model, formats, brand kit, asset library, sidebar navigation
+- [ ] M2 Long video: chapters, 16:9, B-roll, captions + SRT
+- [ ] M3 Presentations: SVG slides → PDF/PNG, narrated MP4
+- [ ] M4 Design: thumbnails, posts, banners
+- [ ] M5 Strategy: plan, calendar, briefs → projects, weekly review with YouTube stats
+- [ ] M6 1.0 polish: Secret Service portal, offline Flathub build, translations, docs
