@@ -5,10 +5,60 @@ use crate::board::{refresh, spawn};
 use crate::State;
 use adw::prelude::*;
 use gtk::glib;
-use shorts_core::config::{ProviderKind, VoiceEngine};
+use shorts_core::config::{ProviderKind, RenderSettings, VoiceEngine};
 use shorts_core::publish::YouTube;
 use shorts_core::secrets::Secrets;
 use std::rc::Rc;
+
+struct StyleRows {
+    font_file: adw::EntryRow,
+    font_scale: adw::SpinRow,
+    position: adw::ComboRow,
+    uppercase: adw::SwitchRow,
+    wrap: adw::SpinRow,
+    text_color: adw::EntryRow,
+    text_box: adw::SwitchRow,
+    box_color: adw::EntryRow,
+    box_opacity: adw::SpinRow,
+    background: adw::EntryRow,
+    background_image: adw::EntryRow,
+    dim: adw::SpinRow,
+    accent: adw::EntryRow,
+    progress: adw::SwitchRow,
+}
+
+const POSITIONS: [&str; 3] = ["top", "center", "bottom"];
+
+impl StyleRows {
+    fn read(&self, base: &RenderSettings) -> RenderSettings {
+        let t = |e: &adw::EntryRow| e.text().trim().to_string();
+        RenderSettings {
+            font_file: t(&self.font_file),
+            font_scale: self.font_scale.value() as f32,
+            text_position: combo_value(&self.position, &POSITIONS),
+            uppercase: self.uppercase.is_active(),
+            wrap_chars: self.wrap.value() as usize,
+            text_color: if t(&self.text_color).is_empty() { "white".into() } else { t(&self.text_color) },
+            text_box: self.text_box.is_active(),
+            text_box_color: if t(&self.box_color).is_empty() { "black".into() } else { t(&self.box_color) },
+            text_box_opacity: self.box_opacity.value() as f32,
+            background: if t(&self.background).is_empty() { "black".into() } else { t(&self.background) },
+            background_image: t(&self.background_image),
+            background_dim: self.dim.value() as f32,
+            accent: if t(&self.accent).is_empty() { "white".into() } else { t(&self.accent) },
+            progress_bar: self.progress.is_active(),
+            ..base.clone()
+        }
+    }
+}
+
+fn spin(title: &str, min: f64, max: f64, step: f64, value: f64, digits: u32) -> adw::SpinRow {
+    let r = adw::SpinRow::with_range(min, max, step);
+    r.set_title(title);
+    r.set_digits(digits);
+    r.set_value(value);
+    r
+}
 
 struct ProviderRows {
     enabled: adw::SwitchRow,
@@ -163,7 +213,108 @@ pub fn open(state: &Rc<State>) {
     yg.add(&yt_id);
     yg.add(&yt_secret);
     yg.add(&connect_row);
+    if s.data_path().map(|d| d.join("youtube-token.json").exists()).unwrap_or(false) {
+        let (row, s2) = (connect_row.clone(), s.clone());
+        spawn(
+            state,
+            move || YouTube::from_settings(&s2.publish, &s2.data_path()?)?.channel(),
+            move |_, res| {
+                if let Ok((name, link)) = res {
+                    row.set_subtitle(&format!("Connected to {name} · {link}"));
+                }
+            },
+        );
+    }
     pub_page.add(&yg);
+
+    /* ---- Style ---- */
+    let style_page = adw::PreferencesPage::builder().title("Style").icon_name("applications-graphics-symbolic").build();
+    let r = &s.render;
+    let st_rows = Rc::new(StyleRows {
+        font_file: entry("Font file (.ttf/.otf, empty = system default)", &r.font_file),
+        font_scale: spin("Text size (share of width)", 0.04, 0.14, 0.005, r.font_scale as f64, 3),
+        position: combo("Text position", &POSITIONS, &r.text_position),
+        uppercase: adw::SwitchRow::builder().title("Uppercase text").active(r.uppercase).build(),
+        wrap: spin("Characters per line", 8.0, 30.0, 1.0, r.wrap_chars as f64, 0),
+        text_color: entry("Text colour (name or 0xRRGGBB)", &r.text_color),
+        text_box: adw::SwitchRow::builder().title("Box behind text").active(r.text_box).build(),
+        box_color: entry("Box colour", &r.text_box_color),
+        box_opacity: spin("Box opacity", 0.0, 1.0, 0.05, r.text_box_opacity as f64, 2),
+        background: entry("Background colour", &r.background),
+        background_image: entry("Background picture (path, optional)", &r.background_image),
+        dim: spin("Darken picture", 0.0, 0.9, 0.05, r.background_dim as f64, 2),
+        accent: entry("Accent colour (progress bar)", &r.accent),
+        progress: adw::SwitchRow::builder().title("Progress bar").active(r.progress_bar).build(),
+    });
+    let tg = adw::PreferencesGroup::builder().title("Text").build();
+    for w in [st_rows.font_file.upcast_ref::<gtk::Widget>(), st_rows.font_scale.upcast_ref(), st_rows.position.upcast_ref(),
+              st_rows.uppercase.upcast_ref(), st_rows.wrap.upcast_ref(), st_rows.text_color.upcast_ref(),
+              st_rows.text_box.upcast_ref(), st_rows.box_color.upcast_ref(), st_rows.box_opacity.upcast_ref()] {
+        tg.add(w);
+    }
+    let bg = adw::PreferencesGroup::builder().title("Background").build();
+    for w in [st_rows.background.upcast_ref::<gtk::Widget>(), st_rows.background_image.upcast_ref(), st_rows.dim.upcast_ref(),
+              st_rows.accent.upcast_ref(), st_rows.progress.upcast_ref()] {
+        bg.add(w);
+    }
+    let pv = adw::PreferencesGroup::builder().title("Preview").description("Rendered with the same engine as your videos.").build();
+    let picture = gtk::Picture::builder().height_request(480).content_fit(gtk::ContentFit::Contain).build();
+    let preview_btn = gtk::Button::builder().label("Update preview").halign(gtk::Align::Start).build();
+    let pv_box = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(8).build();
+    pv_box.append(&picture);
+    pv_box.append(&preview_btn);
+    pv.add(&pv_box);
+    style_page.add(&pv);
+    style_page.add(&tg);
+    style_page.add(&bg);
+    {
+        let (st, rows, pic) = (state.clone(), st_rows.clone(), picture.clone());
+        let render_preview = move |btn: &gtk::Button| {
+            let base = st.settings.borrow().clone();
+            let style = rows.read(&base.render);
+            btn.set_sensitive(false);
+            let (btn, pic) = (btn.clone(), pic.clone());
+            spawn(
+                &st,
+                move || {
+                    let dir = base.data_path()?.join("preview");
+                    shorts_core::render::preview_frame("Your AI answers are bad because of THIS", &style, &dir, &dir.join("preview.png"))
+                },
+                move |st, res| {
+                    btn.set_sensitive(true);
+                    match res {
+                        Ok(path) => pic.set_filename(Some(&path)),
+                        Err(e) => st.toast(&format!("Preview failed: {e}")),
+                    }
+                },
+            );
+        };
+        preview_btn.connect_clicked(render_preview);
+    }
+
+    /* ---- Music ---- */
+    let music_page = adw::PreferencesPage::builder().title("Music").icon_name("audio-x-generic-symbolic").build();
+    let mg = adw::PreferencesGroup::builder()
+        .title("Royalty-free background music")
+        .description("Use a folder of tracks you are allowed to use (YouTube Audio Library, Pixabay Music, Free Music Archive CC0/CC BY). Each file needs license info: a sidecar <file>.json with title, artist, license and url, or one library.json. Tracks without a license are never used. The credit goes into the description.")
+        .build();
+    let m_enabled = adw::SwitchRow::builder().title("Add background music").active(s.music.enabled).build();
+    let m_folder = entry("Music folder", &s.music.folder);
+    let m_volume = spin("Music level (dB)", -40.0, 0.0, 1.0, s.music.volume_db as f64, 0);
+    let m_duck = adw::SwitchRow::builder().title("Lower music while the voice speaks").active(s.music.ducking).build();
+    let count = if s.music.folder.is_empty() {
+        "No folder set".to_string()
+    } else {
+        match shorts_core::music::scan(std::path::Path::new(&s.music.folder)) {
+            Ok(t) => format!("{} licensed track(s) found", t.len()),
+            Err(e) => e.to_string(),
+        }
+    };
+    let m_count = adw::ActionRow::builder().title("Library").subtitle(count.as_str()).build();
+    for w in [m_enabled.upcast_ref::<gtk::Widget>(), m_folder.upcast_ref(), m_volume.upcast_ref(), m_duck.upcast_ref(), m_count.upcast_ref()] {
+        mg.add(w);
+    }
+    music_page.add(&mg);
 
     /* ---- Channel ---- */
     let ch = adw::PreferencesPage::builder().title("Channel").icon_name("video-display-symbolic").build();
@@ -179,7 +330,7 @@ pub fn open(state: &Rc<State>) {
     }
     ch.add(&cg);
 
-    for page in [&models, &routing, &voice_page, &pub_page, &ch] {
+    for page in [&models, &routing, &voice_page, &style_page, &music_page, &pub_page, &ch] {
         dialog.add(page);
     }
 
@@ -224,6 +375,11 @@ pub fn open(state: &Rc<State>) {
                     secrets.set(name, &t);
                 }
             }
+            s.render = st_rows.read(&s.render);
+            s.music.enabled = m_enabled.is_active();
+            s.music.folder = m_folder.text().trim().to_string();
+            s.music.volume_db = m_volume.value() as f32;
+            s.music.ducking = m_duck.is_active();
             s.strategy.niche = niche.text().to_string();
             s.strategy.audience = audience.text().to_string();
             s.strategy.tone = tone.text().to_string();
@@ -254,12 +410,13 @@ pub fn open(state: &Rc<State>) {
                     let yt = YouTube::from_settings(&s.publish, &s.data_path()?)?;
                     yt.connect(|url| {
                         let _ = std::process::Command::new("xdg-open").arg(url).spawn();
-                    })
+                    })?;
+                    yt.channel().map(|(name, _)| name)
                 },
                 move |st, res| {
                     btn.set_sensitive(true);
                     match res {
-                        Ok(()) => { row.set_subtitle("Connected"); st.toast("YouTube connected"); }
+                        Ok(name) => { row.set_subtitle(&format!("Connected to {name}")); st.toast(&format!("YouTube connected: {name}")); }
                         Err(e) => { row.set_subtitle("Not connected"); st.toast(&e.to_string()); }
                     }
                 },

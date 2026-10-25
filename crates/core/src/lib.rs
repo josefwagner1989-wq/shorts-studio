@@ -11,6 +11,7 @@ pub mod error;
 pub mod jsonx;
 pub mod llm;
 pub mod model;
+pub mod music;
 pub mod publish;
 pub mod render;
 pub mod router;

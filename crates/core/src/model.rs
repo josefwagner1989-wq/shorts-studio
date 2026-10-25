@@ -106,7 +106,106 @@ pub struct Video {
     pub voice_files: Vec<String>,
     pub video_file: Option<String>,
     pub published_url: Option<String>,
+    /// Sources for the facts in the video, listed in the description.
+    #[serde(default)]
+    pub sources: Vec<Source>,
+    /// Background track used in the render (credited in the description).
+    #[serde(default)]
+    pub music: Option<crate::music::Track>,
+    #[serde(default)]
+    pub legal: Option<LegalReview>,
     #[serde(default)]
     pub log: Vec<String>,
     pub created_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Source {
+    pub title: String,
+    pub url: String,
+}
+
+impl Source {
+    /// Parses one "Title | https://…" line (or a bare URL).
+    pub fn parse_line(line: &str) -> Option<Source> {
+        let line = line.trim();
+        if line.is_empty() {
+            return None;
+        }
+        let (title, url) = match line.rsplit_once('|') {
+            Some((t, u)) => (t.trim().to_string(), u.trim().to_string()),
+            None => (String::new(), line.to_string()),
+        };
+        if !(url.starts_with("https://") || url.starts_with("http://")) {
+            return None;
+        }
+        Some(Source { title: if title.is_empty() { url.clone() } else { title }, url })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LegalFinding {
+    /// copyright, trademark, defamation, health-claim, finance-claim, privacy,
+    /// music-license, sources, ai-disclosure, platform-policy, other
+    pub category: String,
+    /// "low", "medium" or "high"
+    pub severity: String,
+    pub detail: String,
+    pub fix: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LegalReview {
+    /// "low", "medium" or "high"
+    pub overall: String,
+    pub findings: Vec<LegalFinding>,
+    /// Claims in the script that need a source before publishing.
+    #[serde(default, rename = "claimsNeedingSources", alias = "claims_needing_sources")]
+    pub claims_needing_sources: Vec<String>,
+}
+
+impl LegalReview {
+    pub fn blocks_auto_publish(&self) -> bool {
+        self.overall == "high" || self.findings.iter().any(|f| f.severity == "high")
+    }
+}
+
+/// The full description: caption, hashtags, sources, music credit, AI disclosure.
+pub fn description(video: &Video, script: &Script) -> String {
+    let mut out = script.caption.trim().to_string();
+    if !video.sources.is_empty() {
+        out.push_str("\n\nSources:");
+        for s in &video.sources {
+            out.push_str(&format!("\n• {} – {}", s.title, s.url));
+        }
+    }
+    if let Some(m) = &video.music {
+        out.push_str(&format!("\n\n{}", m.credit()));
+    }
+    out.push_str("\n\nMade with AI assistance (script, voice).");
+    let tags = script.hashtags.join(" ");
+    out.push_str(&format!("\n\n{tags} #Shorts"));
+    out.trim().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn source_lines_and_description() {
+        assert_eq!(Source::parse_line("WHO report | https://who.int/x").unwrap().title, "WHO report");
+        assert_eq!(Source::parse_line("https://a.b").unwrap().title, "https://a.b");
+        assert!(Source::parse_line("not a link").is_none());
+        let v = Video {
+            sources: vec![Source { title: "Paper".into(), url: "https://p.q".into() }],
+            music: Some(crate::music::Track { file: String::new(), title: "Calm".into(), artist: "X".into(), license: "CC0".into(), url: String::new() }),
+            ..Default::default()
+        };
+        let s = Script { scenes: vec![], caption: "Hi".into(), hashtags: vec!["#ai".into()] };
+        let d = description(&v, &s);
+        assert!(d.contains("Sources:\n• Paper – https://p.q"));
+        assert!(d.contains("Music: \"Calm\" by X (CC0)"));
+        assert!(d.ends_with("#ai #Shorts"));
+    }
 }

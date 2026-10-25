@@ -73,3 +73,30 @@ Reply with JSON: {{\"score\": integer 1-10, \"originalityRisk\": \"low\"|\"mediu
     c.fixes.truncate(4);
     Ok(c)
 }
+
+/// Critical and legal screening of a finished script, its description, sources and music.
+/// A screening to catch problems early — not legal advice.
+pub fn legal_review(router: &Router, strategy: &Strategy, video: &crate::model::Video, script: &Script) -> Result<crate::model::LegalReview> {
+    let music = video.music.as_ref().map(|m| m.credit()).unwrap_or_else(|| "(no music)".into());
+    let prompt = format!(
+        "TASK: LEGAL\nYou screen YouTube Shorts for legal and policy risk before publishing. Be strict and concrete; this is a risk screening, not legal advice.\n\
+Channel strategy:\n{}\n\nTitle: {}\nScript: {}\nDescription as it will be published:\n{}\nMusic: {}\n\n\
+Check: copyright (quoted lyrics, long quotes, copied formats), trademarks and brand names used in a misleading way, \
+statements about real people or companies that could be defamatory, health, finance or legal claims that need a source or a disclaimer, \
+privacy (identifiable private persons), whether the music license allows this use and whether attribution is present, \
+whether factual claims have sources, AI disclosure, and YouTube policy (misleading metadata, spam, mass-produced content, dangerous acts, kids content).\n\
+Reply with JSON: {{\"overall\": \"low\"|\"medium\"|\"high\", \"findings\": [{{\"category\": string, \"severity\": \"low\"|\"medium\"|\"high\", \"detail\": string, \"fix\": string}}], \
+\"claimsNeedingSources\": [exact claims from the script that need a source but have none]}}. Use an empty findings list when nothing is wrong.",
+        strategy.as_prompt(),
+        video.idea.as_ref().map(|i| i.title.as_str()).unwrap_or(""),
+        serde_json::to_string(script)?,
+        crate::model::description(video, script),
+        music,
+    );
+    let mut r: crate::model::LegalReview = jsonx::extract(&ask(router, Role::Critic, prompt, 1500, 0.1)?)?;
+    for f in &mut r.findings {
+        f.severity = f.severity.to_lowercase();
+    }
+    r.overall = r.overall.to_lowercase();
+    Ok(r)
+}

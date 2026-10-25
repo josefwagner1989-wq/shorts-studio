@@ -19,10 +19,7 @@ pub trait Publisher {
     fn publish(&self, video: &Video, script: &Script, file: &Path) -> Result<String>;
 }
 
-pub fn description(script: &Script) -> String {
-    let tags = script.hashtags.join(" ");
-    format!("{}\n\n{} #Shorts", script.caption, tags).trim().to_string()
-}
+pub use crate::model::description;
 
 /* ---------------- outbox ---------------- */
 
@@ -38,7 +35,7 @@ impl Publisher for Outbox {
         std::fs::create_dir_all(&self.dir)?;
         let target = self.dir.join(format!("{}.mp4", video.id));
         std::fs::copy(file, &target)?;
-        std::fs::write(self.dir.join(format!("{}.txt", video.id)), description(script))?;
+        std::fs::write(self.dir.join(format!("{}.txt", video.id)), description(video, script))?;
         Ok(target.display().to_string())
     }
 }
@@ -55,7 +52,8 @@ pub struct YouTube {
 
 const AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
-const SCOPE: &str = "https://www.googleapis.com/auth/youtube.upload";
+/// Upload videos, and read the channel name and video statistics.
+const SCOPE: &str = "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly";
 
 impl YouTube {
     pub fn from_settings(p: &PublishSettings, data_dir: &Path) -> Result<Self> {
@@ -122,6 +120,34 @@ impl YouTube {
         Ok(())
     }
 
+    /// The connected channel: (name, link).
+    pub fn channel(&self) -> Result<(String, String)> {
+        let token = self.access_token()?;
+        let v: Value = reqwest::blocking::Client::new()
+            .get("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true")
+            .bearer_auth(token)
+            .send()?
+            .json()?;
+        let item = &v["items"][0];
+        let id = item["id"].as_str().ok_or_else(|| Error::Publish(format!("no channel on this Google account: {v}")))?;
+        let name = item["snippet"]["title"].as_str().unwrap_or(id).to_string();
+        Ok((name, format!("https://youtube.com/channel/{id}")))
+    }
+
+    /// View and like counts for uploaded videos, by video id.
+    pub fn stats(&self, ids: &[String]) -> Result<Vec<(String, u64, u64)>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let token = self.access_token()?;
+        let url = format!("https://www.googleapis.com/youtube/v3/videos?part=statistics&id={}", ids.join(","));
+        let v: Value = reqwest::blocking::Client::new().get(url).bearer_auth(token).send()?.json()?;
+        Ok(v["items"].as_array().into_iter().flatten().map(|i| {
+            let n = |k: &str| i["statistics"][k].as_str().and_then(|x| x.parse().ok()).unwrap_or(0);
+            (i["id"].as_str().unwrap_or_default().to_string(), n("viewCount"), n("likeCount"))
+        }).collect())
+    }
+
     fn access_token(&self) -> Result<String> {
         let saved: Value = serde_json::from_str(&std::fs::read_to_string(&self.token_file)
             .map_err(|_| Error::Publish("YouTube is not connected yet".into()))?)?;
@@ -146,7 +172,7 @@ impl Publisher for YouTube {
         let token = self.access_token()?;
         let title: String = video.idea.as_ref().map(|i| i.title.clone()).unwrap_or_else(|| "New short".into()).chars().take(100).collect();
         let meta = json!({
-            "snippet": {"title": title, "description": description(script),
+            "snippet": {"title": title, "description": description(video, script).chars().take(4900).collect::<String>(),
                         "tags": script.hashtags.iter().map(|h| h.trim_start_matches('#')).collect::<Vec<_>>(),
                         "categoryId": "27"},
             "status": {"privacyStatus": self.privacy, "selfDeclaredMadeForKids": false, "containsSyntheticMedia": true}

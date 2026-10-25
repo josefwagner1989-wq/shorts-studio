@@ -5,6 +5,7 @@
 //!   shorts list                    show the board
 //!   shorts run <ID|all> [--publish youtube|outbox]
 //!   shorts approve <ID>
+//!   shorts legal <ID>              critical and legal screening
 //!   shorts connect-youtube         one-time Google sign-in
 
 use shorts_core::config::{ProviderConfig, ProviderKind, Settings, VoiceEngine};
@@ -100,6 +101,22 @@ fn run(args: &[String]) -> Result<()> {
             println!("{} approved", v.id);
             Ok(())
         }
+        "legal" => {
+            let s = Settings::load_or_default()?;
+            let store = Store::open(&s.data_path()?)?;
+            let router = Router::from_settings(&s)?;
+            let id = args.get(1).ok_or_else(|| shorts_core::Error::Config("usage: shorts legal <ID>".into()))?;
+            let v = workflow::check_legal(&s, &router, &store, store.load(id)?)?;
+            let r = v.legal.unwrap();
+            println!("Overall risk: {} (screening, not legal advice)", r.overall);
+            for f in r.findings {
+                println!("- [{}] {}: {}\n    fix: {}", f.severity, f.category, f.detail, f.fix);
+            }
+            for c in r.claims_needing_sources {
+                println!("- needs a source: {c}");
+            }
+            Ok(())
+        }
         "connect-youtube" => {
             let s = Settings::load_or_default()?;
             let yt = YouTube::from_settings(&s.publish, &s.data_path()?)?;
@@ -111,7 +128,7 @@ fn run(args: &[String]) -> Result<()> {
             Ok(())
         }
         _ => {
-            println!("shorts selftest [DIR] | plan [N] | list | run <ID|all> [--publish youtube|outbox] | approve <ID> | connect-youtube");
+            println!("shorts selftest [DIR] | plan [N] | list | run <ID|all> [--publish youtube|outbox] | approve <ID> | legal <ID> | connect-youtube");
             Ok(())
         }
     }
@@ -136,6 +153,24 @@ fn selftest(dir: Option<&str>) -> Result<()> {
         VoiceEngine::None
     };
 
+    shorts_core::render::check_ffmpeg()?;
+    // A generated test tone stands in for a royalty-free track, with its license sidecar.
+    let music_dir = root.join("music");
+    std::fs::create_dir_all(&music_dir)?;
+    let tone = music_dir.join("test-tone.ogg");
+    let ok = std::process::Command::new("ffmpeg")
+        .args(["-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=220:duration=8", "-c:a", "libvorbis"])
+        .arg(&tone)
+        .status()
+        .map(|st| st.success())
+        .unwrap_or(false);
+    if ok {
+        std::fs::write(music_dir.join("test-tone.ogg.json"),
+            r#"{"title":"Test tone","artist":"Shorts Studio","license":"CC0","url":"https://creativecommons.org/publicdomain/zero/1.0/"}"#)?;
+        s.music.enabled = true;
+        s.music.folder = music_dir.display().to_string();
+    }
+
     let store = Store::open(&root)?;
     let router = Router::from_settings(&s)?;
     let ideas = agents::plan_ideas(&router, &s.strategy, &[], 1)?;
@@ -147,7 +182,9 @@ fn selftest(dir: Option<&str>) -> Result<()> {
     println!(
         "{}",
         serde_json::json!({"ok": done.stage == Stage::Published, "stage": done.stage.label(), "video": file,
-                           "seconds": secs, "voice": format!("{:?}", s.voice), "published": done.published_url})
+                           "seconds": secs, "voice": format!("{:?}", s.voice), "published": done.published_url,
+                           "music": done.music.as_ref().map(|m| m.credit()),
+                           "legal": done.legal.as_ref().map(|l| l.overall.clone())})
     );
     if done.stage != Stage::Published || secs < 5.0 {
         return Err(shorts_core::Error::Config("selftest did not reach Published with a playable video".into()));

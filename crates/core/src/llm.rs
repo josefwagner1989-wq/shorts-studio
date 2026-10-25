@@ -164,6 +164,9 @@ impl LlmProvider for MockProvider {
                 {"seconds": 5, "onScreen": "3. Let it ask you first", "voiceover": "Third, ask it to ask you three questions first.", "visual": "questions"},
                 {"seconds": 3, "onScreen": "Follow for one AI trick a day", "voiceover": "Follow for one AI trick a day.", "visual": "cta"}
             ], "caption": "Three habits for better AI answers", "hashtags": ["#AItips", "#prompting"]}).to_string()
+        } else if req.prompt.contains("TASK: LEGAL") {
+            json!({"overall": "low", "findings": [{"category": "sources", "severity": "low",
+                   "detail": "Tips are opinion, no factual claims.", "fix": "None needed."}], "claimsNeedingSources": []}).to_string()
         } else {
             json!({"score": 8, "originalityRisk": "low", "summary": "Clear hook and concrete tips.",
                    "fixes": ["Show a before/after answer in scene 3"]}).to_string()

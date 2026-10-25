@@ -2,8 +2,13 @@ name: CI
 
 on:
   push:
+    branches: ["**"]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: never
 
 jobs:
   test:
@@ -51,7 +56,7 @@ jobs:
     name: Flatpak bundle
     runs-on: ubuntu-24.04
     needs: test
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     container:
       image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-47
       options: --privileged
@@ -62,3 +67,26 @@ jobs:
           bundle: shorts-studio.flatpak
           manifest-path: flatpak/io.github.shortsstudio.ShortsStudio.yml
           cache-key: flatpak-builder-${{ github.sha }}
+
+  release:
+    name: Release with installer
+    runs-on: ubuntu-24.04
+    needs: flatpak
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "*x86_64*"
+          merge-multiple: true
+          path: dist
+      - name: Attach installer to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -la dist
+          cp scripts/install.sh dist/install.sh
+          gh release create "${GITHUB_REF_NAME}" dist/*.flatpak dist/install.sh \
+            --title "Shorts Studio ${GITHUB_REF_NAME}" --generate-notes --prerelease

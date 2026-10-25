@@ -5,6 +5,7 @@ use crate::agents;
 use crate::config::Settings;
 use crate::model::{Idea, Stage, Video};
 use crate::publish::Publisher;
+use crate::music;
 use crate::render;
 use crate::router::Router;
 use crate::store::Store;
@@ -81,16 +82,41 @@ pub fn run_video(
         }
 
         if video.stage == Stage::Voiced {
+            if settings.music.enabled && video.music.is_none() {
+                match music::scan(std::path::Path::new(&settings.music.folder)) {
+                    Ok(tracks) => match music::pick(&tracks, &video.id) {
+                        Some(t) => {
+                            step(&mut video, format!("Music: {}", t.credit()));
+                            video.music = Some(t.clone());
+                        }
+                        None => step(&mut video, "No licensed tracks in the music folder; rendering without music".into()),
+                    },
+                    Err(e) => step(&mut video, format!("Music skipped: {e}")),
+                }
+            }
             step(&mut video, "Rendering 9:16 video".into());
             let voices: Vec<_> = video.voice_files.iter().map(std::path::PathBuf::from).collect();
-            let out = render::render_short(video.script.as_ref().unwrap(), &voices, &settings.render, &dir.join("work"), &dir.join("short.mp4"))?;
+            let bed = video.music.as_ref().map(|t| (t, &settings.music));
+            let out = render::render_short(video.script.as_ref().unwrap(), &voices, &settings.render, bed, &dir.join("work"), &dir.join("short.mp4"))?;
             video.video_file = Some(out.display().to_string());
             video.stage = Stage::Rendered;
             store.save(&video)?;
         }
 
+        if video.stage == Stage::Rendered && video.legal.is_none() {
+            step(&mut video, "Checking legal and policy risks".into());
+            let r = agents::legal_review(router, &settings.strategy, &video, video.script.as_ref().unwrap())?;
+            step(&mut video, format!("Legal check: {} risk, {} finding(s)", r.overall, r.findings.len()));
+            video.legal = Some(r);
+            store.save(&video)?;
+        }
+
         let score = video.critique.as_ref().map(|c| c.score).unwrap_or(0);
-        if video.stage == Stage::Rendered && settings.publish.auto_publish && score >= settings.publish.min_score {
+        let legal_block = video.legal.as_ref().is_some_and(|l| l.blocks_auto_publish());
+        if video.stage == Stage::Rendered && settings.publish.auto_publish && legal_block {
+            step(&mut video, "Auto-publish held: the legal check found a high risk. Review it first.".into());
+        }
+        if video.stage == Stage::Rendered && settings.publish.auto_publish && !legal_block && score >= settings.publish.min_score {
             step(&mut video, "Auto-approved by score".into());
             video.stage = Stage::Approved;
             store.save(&video)?;
@@ -128,6 +154,16 @@ pub fn approve(store: &Store, mut video: Video) -> Result<Video> {
     }
     video.stage = Stage::Approved;
     video.log.push("Approved by you".into());
+    store.save(&video)?;
+    Ok(video)
+}
+
+/// Runs (or re-runs) only the critical and legal check for a video.
+pub fn check_legal(settings: &Settings, router: &Router, store: &Store, mut video: Video) -> Result<Video> {
+    let script = video.script.clone().ok_or_else(|| Error::Config("write the script first".into()))?;
+    let r = agents::legal_review(router, &settings.strategy, &video, &script)?;
+    video.log.push(format!("Legal check: {} risk, {} finding(s)", r.overall, r.findings.len()));
+    video.legal = Some(r);
     store.save(&video)?;
     Ok(video)
 }

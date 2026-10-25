@@ -194,6 +194,55 @@ fn open_detail(state: &Rc<State>, id: &str) {
         body.append(&label(&v.log[start..].join("\n"), &["dim-label", "caption"]));
     }
 
+    // Sources: one per line, "Title | https://…". Listed in the description.
+    body.append(&label("Sources (one per line: Title | https://…)", &["heading"]));
+    let src_buf = gtk::TextBuffer::new(None);
+    src_buf.set_text(&v.sources.iter().map(|s| format!("{} | {}", s.title, s.url)).collect::<Vec<_>>().join("\n"));
+    let src_view = gtk::TextView::builder().buffer(&src_buf).wrap_mode(gtk::WrapMode::WordChar)
+        .top_margin(8).bottom_margin(8).left_margin(8).right_margin(8).height_request(90).css_classes(["card"]).build();
+    body.append(&src_view);
+    let src_save = gtk::Button::builder().label("Save sources").halign(gtk::Align::Start).build();
+    {
+        let (st, id, buf) = (state.clone(), v.id.clone(), src_buf.clone());
+        src_save.connect_clicked(move |_| {
+            let text = buf.text(&buf.start_iter(), &buf.end_iter(), false).to_string();
+            let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
+            let parsed: Vec<_> = lines.iter().filter_map(|l| shorts_core::model::Source::parse_line(l)).collect();
+            let bad = lines.len() - parsed.len();
+            let res = store_for(&st.settings.borrow()).and_then(|s| {
+                let mut v = s.load(&id)?;
+                v.sources = parsed;
+                s.save(&v)
+            });
+            match (res, bad) {
+                (Err(e), _) => st.toast(&format!("Could not save: {e}")),
+                (Ok(()), 0) => st.toast("Sources saved"),
+                (Ok(()), n) => st.toast(&format!("Saved. {n} line(s) skipped: each needs an http(s) link")),
+            }
+        });
+    }
+    body.append(&src_save);
+
+    if let Some(m) = &v.music {
+        body.append(&label("Music", &["heading"]));
+        body.append(&label(&m.credit(), &[]));
+    }
+
+    if let Some(l) = &v.legal {
+        body.append(&label(&format!("Legal & critical check: {} risk", l.overall), &["heading"]));
+        if l.findings.is_empty() {
+            body.append(&label("No issues found.", &[]));
+        }
+        for f in &l.findings {
+            let class = match f.severity.as_str() { "high" => "error", "medium" => "warning", _ => "dim-label" };
+            body.append(&label(&format!("[{}] {}: {}\n    Fix: {}", f.severity, f.category, f.detail, f.fix), &[class]));
+        }
+        for c in &l.claims_needing_sources {
+            body.append(&label(&format!("Needs a source: {c}"), &["warning"]));
+        }
+        body.append(&label("This is an automated screening, not legal advice.", &["dim-label", "caption"]));
+    }
+
     let actions = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).spacing(8).build();
     body.append(&actions);
 
@@ -239,6 +288,37 @@ fn open_detail(state: &Rc<State>, id: &str) {
             d.close();
             st.toast("Publishing…");
             run_ids(&st, vec![id.clone()], true, "Published", || {});
+        });
+    }
+    if v.script.is_some() {
+        let b = add(if v.legal.is_some() { "Re-check legal" } else { "Check legal & critical issues" }, false);
+        let (st, d, id) = (state.clone(), dialog.clone(), v.id.clone());
+        b.connect_clicked(move |b| {
+            b.set_sensitive(false);
+            st.toast("Checking for legal and critical issues…");
+            let s = st.settings.borrow().clone();
+            let id2 = id.clone();
+            let d = d.clone();
+            spawn(
+                &st,
+                move || {
+                    let store = store_for(&s)?;
+                    let router = Router::from_settings(&s)?;
+                    workflow::check_legal(&s, &router, &store, store.load(&id2)?)
+                },
+                move |st, res| {
+                    d.close();
+                    match res {
+                        Ok(v) => {
+                            let l = v.legal.as_ref().unwrap();
+                            st.toast(&format!("Legal check: {} risk, {} finding(s)", l.overall, l.findings.len()));
+                            refresh(st);
+                            open_detail(st, &v.id);
+                        }
+                        Err(e) => st.toast(&format!("Check stopped: {e}")),
+                    }
+                },
+            );
         });
     }
     if let Some(file) = v.video_file.clone() {
