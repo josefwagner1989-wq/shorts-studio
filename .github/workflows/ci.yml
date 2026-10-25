@@ -69,11 +69,21 @@ jobs:
       options: --privileged
     steps:
       - uses: actions/checkout@v4
-      - uses: flathub-infra/flatpak-github-actions/flatpak-builder@master
+      - name: Build the Flatpak (errors reported as annotations)
+        run: |
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          ci/run.sh flatpak-builder flatpak-builder --user --disable-rofiles-fuse --install-deps-from=flathub \
+            --force-clean --repo=repo build flatpak/io.github.shortsstudio.ShortsStudio.yml
+      - name: Make the installer bundle
+        run: |
+          ci/run.sh bundle flatpak build-bundle repo shorts-studio.flatpak io.github.shortsstudio.ShortsStudio \
+            --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo
+          ls -la shorts-studio.flatpak
+          echo "::notice title=flatpak::bundle $(du -h shorts-studio.flatpak | cut -f1)"
+      - uses: actions/upload-artifact@v4
         with:
-          bundle: shorts-studio.flatpak
-          manifest-path: flatpak/io.github.shortsstudio.ShortsStudio.yml
-          cache-key: flatpak-builder-${{ github.sha }}
+          name: shorts-studio-x86_64
+          path: shorts-studio.flatpak
 
   release:
     name: Release with installer

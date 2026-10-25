@@ -44,15 +44,16 @@ modules:
         tag: n7.1
 
   - name: espeak-ng
-    buildsystem: autotools
-    no-parallel-make: true
+    buildsystem: simple
+    build-commands:
+      - ./autogen.sh
+      - ./configure --prefix=/app --disable-static
+      - make -j1
+      - make install
     sources:
       - type: git
         url: https://github.com/espeak-ng/espeak-ng.git
         tag: "1.52.0"
-      - type: script
-        dest-filename: autogen.sh
-        commands: [./autogen.sh "$@"]
 
   - name: shorts-studio
     buildsystem: simple
