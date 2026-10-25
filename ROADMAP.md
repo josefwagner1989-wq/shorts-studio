@@ -31,7 +31,7 @@ Someone installs the Flatpak, adds one API key in Preferences and presses **Plan
 - [ ] Captions: burn word-timed subtitles from the voiceover text
 
 ### Wed 28 Oct
-- [ ] Flatpak job green and the `.flatpak` bundle downloadable from CI
+- [x] Flatpak job green and the `.flatpak` bundle downloadable from CI (21 MB, bundles ffmpeg/x264/espeak-ng)
 - [ ] Piper voice inside the Flatpak (bundle piper, pick a voice file in Preferences)
 - [ ] Progress shown in the app while producing (step label in the video dialog)
 
