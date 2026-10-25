@@ -6,6 +6,7 @@
 //! stage in the [`store::Store`].
 
 pub mod agents;
+pub mod brand;
 pub mod config;
 pub mod error;
 pub mod jsonx;

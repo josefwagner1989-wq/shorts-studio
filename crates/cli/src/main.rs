@@ -47,7 +47,7 @@ fn run(args: &[String]) -> Result<()> {
             let router = Router::from_settings(&s)?;
             let n = args.get(1).and_then(|x| x.parse().ok()).unwrap_or(5);
             let existing: Vec<String> = store.list()?.iter().filter_map(|v| v.idea.as_ref().map(|i| i.title.clone())).collect();
-            for idea in agents::plan_ideas(&router, &s.strategy, &existing, n)? {
+            for idea in agents::plan_ideas(&router, &s.context(), &existing, n)? {
                 let v = workflow::new_video(&store, idea)?;
                 println!("{}  {}", v.id, v.idea.unwrap().title);
             }
@@ -175,7 +175,7 @@ fn selftest(dir: Option<&str>) -> Result<()> {
 
     let store = Store::open(&root)?;
     let router = Router::from_settings(&s)?;
-    let ideas = agents::plan_ideas(&router, &s.strategy, &[], 1)?;
+    let ideas = agents::plan_ideas(&router, &s.context(), &[], 1)?;
     let v = workflow::new_video(&store, ideas[0].clone())?;
     let outbox = Outbox { dir: root.join("outbox") };
     let done = workflow::run_video(&s, &router, &store, Some(&outbox), v, Default::default(), &|m| println!("  {m}"))?;

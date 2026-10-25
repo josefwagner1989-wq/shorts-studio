@@ -182,6 +182,8 @@ pub struct Settings {
     #[serde(default)]
     pub music: MusicSettings,
     #[serde(default)]
+    pub brand: crate::brand::Brand,
+    #[serde(default)]
     pub publish: PublishSettings,
     /// Where projects, audio and videos are written. Empty = XDG data dir.
     #[serde(default)]
@@ -215,6 +217,7 @@ impl Default for Settings {
             voice: VoiceEngine::Espeak { voice: "en-us".into() },
             render: RenderSettings::default(),
             music: MusicSettings::default(),
+            brand: crate::brand::Brand::default(),
             publish: PublishSettings::default(),
             data_dir: String::new(),
         }
@@ -222,6 +225,11 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// Channel strategy plus brand voice, given to every agent prompt.
+    pub fn context(&self) -> String {
+        format!("{}\n{}", self.strategy.as_prompt(), self.brand.as_prompt()).trim_end().to_string()
+    }
+
     pub fn config_path() -> Result<PathBuf> {
         let dirs = directories::ProjectDirs::from("io.github", "shortsstudio", "shorts-studio")
             .ok_or_else(|| Error::Config("no home directory".into()))?;

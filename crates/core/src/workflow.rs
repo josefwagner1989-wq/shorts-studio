@@ -52,7 +52,7 @@ pub fn run_video(
     let result: Result<()> = (|| {
         if video.script.is_none() || video.stage == Stage::Idea {
             step(&mut video, "Writing script".into());
-            let script = agents::write_script(router, &settings.strategy, &idea, &[])?;
+            let script = agents::write_script(router, &settings.context(), &idea, &[])?;
             video.script = Some(script);
             video.stage = Stage::Script;
             store.save(&video)?;
@@ -60,11 +60,11 @@ pub fn run_video(
 
         if video.critique.is_none() {
             step(&mut video, "Running critic".into());
-            let mut c = agents::critique(router, &settings.strategy, &idea, video.script.as_ref().unwrap())?;
+            let mut c = agents::critique(router, &settings.context(), &idea, video.script.as_ref().unwrap())?;
             if opts.revise_below_min && c.score < settings.publish.min_score && !c.fixes.is_empty() {
                 step(&mut video, format!("Critic scored {}/10, rewriting with fixes", c.score));
-                let script = agents::write_script(router, &settings.strategy, &idea, &c.fixes)?;
-                c = agents::critique(router, &settings.strategy, &idea, &script)?;
+                let script = agents::write_script(router, &settings.context(), &idea, &c.fixes)?;
+                c = agents::critique(router, &settings.context(), &idea, &script)?;
                 video.script = Some(script);
             }
             step(&mut video, format!("Critic score {}/10 ({} originality risk)", c.score, c.originality_risk));
@@ -99,7 +99,7 @@ pub fn run_video(
             step(&mut video, msg);
             let voices: Vec<_> = video.voice_files.iter().map(std::path::PathBuf::from).collect();
             let bed = video.music.as_ref().map(|t| (t, &settings.music));
-            let mut style = settings.render.clone();
+            let mut style = settings.brand.apply(&settings.render);
             (style.width, style.height) = video.format().size();
             let out = render::render_short(video.script.as_ref().unwrap(), &voices, &style, bed, &dir.join("work"), &dir.join("short.mp4"))?;
             video.video_file = Some(out.display().to_string());
@@ -109,7 +109,7 @@ pub fn run_video(
 
         if video.stage == Stage::Rendered && video.legal.is_none() {
             step(&mut video, "Checking legal and policy risks".into());
-            let r = agents::legal_review(router, &settings.strategy, &video, video.script.as_ref().unwrap())?;
+            let r = agents::legal_review(router, &settings.context(), &video, video.script.as_ref().unwrap())?;
             step(&mut video, format!("Legal check: {} risk, {} finding(s)", r.overall, r.findings.len()));
             video.legal = Some(r);
             store.save(&video)?;
@@ -165,7 +165,7 @@ pub fn approve(store: &Store, mut video: Video) -> Result<Video> {
 /// Runs (or re-runs) only the critical and legal check for a video.
 pub fn check_legal(settings: &Settings, router: &Router, store: &Store, mut video: Video) -> Result<Video> {
     let script = video.script.clone().ok_or_else(|| Error::Config("write the script first".into()))?;
-    let r = agents::legal_review(router, &settings.strategy, &video, &script)?;
+    let r = agents::legal_review(router, &settings.context(), &video, &script)?;
     video.log.push(format!("Legal check: {} risk, {} finding(s)", r.overall, r.findings.len()));
     video.legal = Some(r);
     store.save(&video)?;

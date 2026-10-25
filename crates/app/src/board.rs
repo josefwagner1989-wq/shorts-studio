@@ -84,7 +84,7 @@ pub fn plan(state: &Rc<State>, btn: gtk::Button) {
             let store = store_for(&s)?;
             let router = Router::from_settings(&s)?;
             let existing: Vec<String> = store.list()?.iter().filter_map(|v| v.idea.as_ref().map(|i| i.title.clone())).collect();
-            let ideas = agents::plan_ideas(&router, &s.strategy, &existing, 5)?;
+            let ideas = agents::plan_ideas(&router, &s.context(), &existing, 5)?;
             let n = ideas.len();
             for i in ideas {
                 workflow::new_video(&store, i)?;

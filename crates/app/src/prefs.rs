@@ -271,7 +271,7 @@ pub fn open(state: &Rc<State>) {
         let (st, rows, pic) = (state.clone(), st_rows.clone(), picture.clone());
         let render_preview = move |btn: &gtk::Button| {
             let base = st.settings.borrow().clone();
-            let style = rows.read(&base.render);
+            let style = base.brand.apply(&rows.read(&base.render));
             btn.set_sensitive(false);
             let (btn, pic) = (btn.clone(), pic.clone());
             spawn(
@@ -330,6 +330,25 @@ pub fn open(state: &Rc<State>) {
     }
     ch.add(&cg);
 
+    let brg = adw::PreferencesGroup::builder()
+        .title("Brand kit")
+        .description("Applied to every video, slide and design. Leave a field empty to use the Style page instead. Colours: #RRGGBB or a name.")
+        .build();
+    let b = &s.brand;
+    let b_name = entry("Brand name", &b.name);
+    let b_tone = entry("Brand voice (how it talks)", &b.tone);
+    let b_bg = entry("Background colour", &b.background);
+    let b_text = entry("Text colour", &b.text);
+    let b_accent = entry("Accent colour", &b.accent);
+    let b_head = entry("Heading font file (.ttf/.otf)", &b.heading_font);
+    let b_body = entry("Body font file (.ttf/.otf)", &b.body_font);
+    let b_lic = entry("Font license (e.g. SIL OFL 1.1)", &b.font_license);
+    let b_logo = entry("Logo file (PNG or SVG)", &b.logo);
+    for r in [&b_name, &b_tone, &b_bg, &b_text, &b_accent, &b_head, &b_body, &b_lic, &b_logo] {
+        brg.add(r);
+    }
+    ch.add(&brg);
+
     for page in [&models, &routing, &voice_page, &style_page, &music_page, &pub_page, &ch] {
         dialog.add(page);
     }
@@ -380,6 +399,17 @@ pub fn open(state: &Rc<State>) {
             s.music.folder = m_folder.text().trim().to_string();
             s.music.volume_db = m_volume.value() as f32;
             s.music.ducking = m_duck.is_active();
+            s.brand = shorts_core::brand::Brand {
+                name: b_name.text().trim().to_string(),
+                tone: b_tone.text().trim().to_string(),
+                background: b_bg.text().trim().to_string(),
+                text: b_text.text().trim().to_string(),
+                accent: b_accent.text().trim().to_string(),
+                heading_font: b_head.text().trim().to_string(),
+                body_font: b_body.text().trim().to_string(),
+                font_license: b_lic.text().trim().to_string(),
+                logo: b_logo.text().trim().to_string(),
+            };
             s.strategy.niche = niche.text().to_string();
             s.strategy.audience = audience.text().to_string();
             s.strategy.tone = tone.text().to_string();
