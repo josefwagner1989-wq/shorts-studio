@@ -41,7 +41,7 @@ fn usage_today(state: &State) -> serde_json::Value {
 }
 
 const VOICES: [&str; 4] = ["espeak", "piper", "openai", "none"];
-const TARGETS: [&str; 3] = ["outbox", "youtube", "tiktok"];
+const TARGETS: [&str; 2] = ["outbox", "youtube"];
 const PRIVACY: [&str; 3] = ["private", "unlisted", "public"];
 
 pub fn open(state: &Rc<State>) {

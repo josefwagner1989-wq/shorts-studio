@@ -7,7 +7,7 @@ use crate::model::{Critique, Idea, Script, Strategy};
 use crate::router::{Role, Router};
 use crate::{Error, Result};
 
-const SYSTEM: &str = "You work on a short-form video channel (TikTok, YouTube Shorts, Reels). \
+const SYSTEM: &str = "You work on a YouTube Shorts channel. \
 Reply with JSON only, no commentary. Platforms demonetize mass-produced, repetitive or \
 template-like content, so every output must be specific, useful and original.";
 

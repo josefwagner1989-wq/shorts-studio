@@ -36,4 +36,3 @@ Someone installs the Flatpak, adds one API key in Preferences and presses **Plan
 - Secret Service portal (oo7) instead of `secrets.json`
 - Offline Flathub build (cargo-sources.json)
 - Background music and B-roll images
-- TikTok publisher once the developer app is audited

@@ -67,17 +67,37 @@ pub enum VoiceEngine {
     None,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Visual style of rendered shorts, edited in Preferences → Style.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
 pub struct RenderSettings {
     pub width: u32,
     pub height: u32,
     pub fps: u32,
+    /// Background colour (ffmpeg colour: `0xRRGGBB` or a name).
     pub background: String,
+    /// Optional background picture (scaled and cropped to fill 9:16). Empty = colour.
+    pub background_image: String,
+    /// Darkens the background picture so text stays readable (0.0–0.9).
+    pub background_dim: f32,
     pub text_color: String,
     pub accent: String,
     /// Optional .ttf/.otf; when empty the renderer searches common font paths.
-    #[serde(default)]
     pub font_file: String,
+    /// Text height as a share of the video width (0.04–0.14).
+    pub font_scale: f32,
+    /// "top", "center" or "bottom".
+    pub text_position: String,
+    /// Box behind the text for readability.
+    pub text_box: bool,
+    pub text_box_color: String,
+    /// 0.0 = transparent, 1.0 = solid.
+    pub text_box_opacity: f32,
+    pub uppercase: bool,
+    /// Maximum characters per line before wrapping.
+    pub wrap_chars: usize,
+    /// Progress bar along the bottom edge.
+    pub progress_bar: bool,
 }
 
 impl Default for RenderSettings {
@@ -87,10 +107,39 @@ impl Default for RenderSettings {
             height: 1920,
             fps: 30,
             background: "0x141922".into(),
+            background_image: String::new(),
+            background_dim: 0.45,
             text_color: "white".into(),
             accent: "0x7D93FF".into(),
             font_file: String::new(),
+            font_scale: 0.085,
+            text_position: "center".into(),
+            text_box: false,
+            text_box_color: "black".into(),
+            text_box_opacity: 0.55,
+            uppercase: false,
+            wrap_chars: 16,
+            progress_bar: true,
         }
+    }
+}
+
+/// Background music from a local folder of royalty-free tracks.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct MusicSettings {
+    pub enabled: bool,
+    /// Folder with audio files plus license info (see `music.rs`).
+    pub folder: String,
+    /// Music level under the voice, in dB (e.g. -18).
+    pub volume_db: f32,
+    /// Lower the music automatically while the voice speaks.
+    pub ducking: bool,
+}
+
+impl Default for MusicSettings {
+    fn default() -> Self {
+        Self { enabled: false, folder: String::new(), volume_db: -18.0, ducking: true }
     }
 }
 
@@ -131,6 +180,8 @@ pub struct Settings {
     #[serde(default)]
     pub render: RenderSettings,
     #[serde(default)]
+    pub music: MusicSettings,
+    #[serde(default)]
     pub publish: PublishSettings,
     /// Where projects, audio and videos are written. Empty = XDG data dir.
     #[serde(default)]
@@ -163,6 +214,7 @@ impl Default for Settings {
             },
             voice: VoiceEngine::Espeak { voice: "en-us".into() },
             render: RenderSettings::default(),
+            music: MusicSettings::default(),
             publish: PublishSettings::default(),
             data_dir: String::new(),
         }

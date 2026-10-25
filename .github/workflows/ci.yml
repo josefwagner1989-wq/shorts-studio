@@ -20,14 +20,17 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - name: Build everything (core, CLI, GTK app)
-        run: cargo build --workspace --all-targets
+        run: ci/run.sh build cargo build --workspace --all-targets --message-format=short
       - name: Unit tests
-        run: cargo test --workspace
+        run: ci/run.sh tests cargo test --workspace
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: ci/run.sh clippy cargo clippy --workspace --all-targets --message-format=short -- -D warnings
         continue-on-error: true
       - name: End-to-end selftest (mock models → voice → render → outbox)
-        run: cargo run -p shorts-cli -- selftest selftest-out | tee selftest.json
+        run: |
+          ci/run.sh selftest cargo run -p shorts-cli -- selftest selftest-out | tee selftest.out
+          tail -1 selftest.out > selftest.json
+          echo "::notice title=selftest::$(cat selftest.json)"
       - name: Grab a frame for review
         if: always()
         run: |

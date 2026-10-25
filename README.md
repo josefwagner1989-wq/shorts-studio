@@ -54,4 +54,3 @@ flatpak run io.github.shortsstudio.ShortsStudio
 - One account and one key per provider, inside each provider's own limits.
 - Videos uploaded to YouTube set `containsSyntheticMedia`, so YouTube shows its AI-content label.
 - The critic flags generic or template-like scripts. YouTube does not monetize mass-produced, repetitive content, so keep human review on until your scores are consistently high.
-- TikTok's Content Posting API only allows public posts after TikTok audits your app. Until then, use the Outbox and post manually.

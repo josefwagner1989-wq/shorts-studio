@@ -3,8 +3,6 @@
 //! - YouTube: Data API v3 resumable upload with OAuth (your own Google Cloud
 //!   client, scope `youtube.upload`). Sets `containsSyntheticMedia` so the
 //!   video carries YouTube's altered/synthetic content label.
-//! - TikTok: the Content Posting API only allows public posts after TikTok
-//!   audits your app; until then posts are private. Not implemented yet.
 //! - Outbox: copies the MP4 + caption into a folder for manual upload anywhere.
 
 use crate::config::PublishSettings;
@@ -177,22 +175,6 @@ pub fn from_settings(s: &crate::config::Settings) -> Result<Box<dyn Publisher>> 
     let data = s.data_path()?;
     match s.publish.target.as_str() {
         "youtube" => Ok(Box::new(YouTube::from_settings(&s.publish, &data)?)),
-        "tiktok" => Ok(Box::new(TikTok)),
         _ => Ok(Box::new(Outbox { dir: data.join("outbox") })),
-    }
-}
-
-/* ---------------- TikTok ---------------- */
-
-pub struct TikTok;
-
-impl Publisher for TikTok {
-    fn name(&self) -> &str {
-        "tiktok"
-    }
-    fn publish(&self, _: &Video, _: &Script, _: &Path) -> Result<String> {
-        Err(Error::Publish(
-            "TikTok publishing needs an approved TikTok developer app (Content Posting API). Use the outbox until then.".into(),
-        ))
     }
 }
