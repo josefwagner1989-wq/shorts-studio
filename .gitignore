@@ -1,0 +1,7 @@
+/target
+/selftest-out
+/build
+/.flatpak-builder
+*.mp4
+frame.png
+selftest.json

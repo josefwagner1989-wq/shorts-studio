@@ -1,0 +1,14 @@
+[package]
+name = "shorts-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Headless Shorts Studio: plan, produce, test and publish from the terminal"
+
+[[bin]]
+name = "shorts"
+path = "src/main.rs"
+
+[dependencies]
+shorts-core.workspace = true
+serde_json.workspace = true

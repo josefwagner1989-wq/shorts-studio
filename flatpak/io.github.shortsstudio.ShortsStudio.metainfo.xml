@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.shortsstudio.ShortsStudio</id>
+  <name>Shorts Studio</name>
+  <summary>Make vertical short videos with AI, rendered on your computer</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <description>
+    <p>Shorts Studio plans ideas, writes and reviews scripts with the AI models you choose (Claude, GPT, Gemini or a local Ollama model), records a voiceover, renders a 9:16 video locally with ffmpeg and publishes it through official platform APIs.</p>
+  </description>
+  <launchable type="desktop-id">io.github.shortsstudio.ShortsStudio.desktop</launchable>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-10-30"><description><p>First beta.</p></description></release>
+  </releases>
+</component>

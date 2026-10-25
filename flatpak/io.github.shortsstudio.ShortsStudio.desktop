@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Shorts Studio
+Comment=Plan, write, voice, render and publish vertical short videos with AI
+Exec=shorts-studio
+Icon=io.github.shortsstudio.ShortsStudio
+Terminal=false
+Type=Application
+Categories=AudioVideo;Video;
+Keywords=youtube;shorts;tiktok;reels;ai;video;
+StartupNotify=true

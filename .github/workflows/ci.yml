@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Build, test, offline selftest
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: System packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgtk-4-dev libadwaita-1-dev ffmpeg espeak-ng fonts-dejavu-core
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Build everything (core, CLI, GTK app)
+        run: cargo build --workspace --all-targets
+      - name: Unit tests
+        run: cargo test --workspace
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+        continue-on-error: true
+      - name: End-to-end selftest (mock models → voice → render → outbox)
+        run: cargo run -p shorts-cli -- selftest selftest-out | tee selftest.json
+      - name: Grab a frame for review
+        if: always()
+        run: |
+          f=$(ls selftest-out/media/*/short.mp4 2>/dev/null | head -1)
+          [ -n "$f" ] && ffmpeg -loglevel error -y -ss 4 -i "$f" -frames:v 1 -vf scale=360:-1 frame.png || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selftest
+          path: |
+            selftest.json
+            frame.png
+            selftest-out/media/*/short.mp4
+            Cargo.lock
+          if-no-files-found: ignore
+
+  flatpak:
+    name: Flatpak bundle
+    runs-on: ubuntu-24.04
+    needs: test
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-47
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+      - uses: flathub-infra/flatpak-github-actions/flatpak-builder@master
+        with:
+          bundle: shorts-studio.flatpak
+          manifest-path: flatpak/io.github.shortsstudio.ShortsStudio.yml
+          cache-key: flatpak-builder-${{ github.sha }}

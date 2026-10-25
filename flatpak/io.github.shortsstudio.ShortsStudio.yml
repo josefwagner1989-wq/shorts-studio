@@ -1,0 +1,72 @@
+# Beta manifest. Build:
+#   flatpak-builder --user --install --force-clean build flatpak/io.github.shortsstudio.ShortsStudio.yml
+# Cargo fetches crates during the build (build-args: --share=network).
+# Before submitting to Flathub, replace that with a generated cargo-sources.json
+# (flatpak-cargo-generator) so the build works offline.
+id: io.github.shortsstudio.ShortsStudio
+runtime: org.gnome.Platform
+runtime-version: "47"
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: shorts-studio
+finish-args:
+  - --share=ipc
+  - --share=network          # model APIs, YouTube upload, local Ollama
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --filesystem=xdg-videos  # optional: export finished shorts to ~/Videos
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+modules:
+  - name: x264
+    config-opts: [--enable-shared, --disable-cli, --enable-pic]
+    sources:
+      - type: git
+        url: https://code.videolan.org/videolan/x264.git
+        branch: stable
+
+  - name: ffmpeg
+    config-opts:
+      - --enable-gpl
+      - --enable-shared
+      - --disable-static
+      - --disable-doc
+      - --disable-debug
+      - --enable-libx264
+      - --enable-libfreetype
+      - --enable-libfontconfig
+    cleanup: [/include, /lib/pkgconfig, /share/ffmpeg/examples]
+    sources:
+      - type: git
+        url: https://github.com/FFmpeg/FFmpeg.git
+        tag: n7.1
+
+  - name: espeak-ng
+    buildsystem: autotools
+    no-parallel-make: true
+    sources:
+      - type: git
+        url: https://github.com/espeak-ng/espeak-ng.git
+        tag: "1.52.0"
+      - type: script
+        dest-filename: autogen.sh
+        commands: [./autogen.sh "$@"]
+
+  - name: shorts-studio
+    buildsystem: simple
+    build-options:
+      build-args: [--share=network]
+      env:
+        CARGO_HOME: /run/build/shorts-studio/cargo
+    build-commands:
+      - cargo build --release -p shorts-studio -p shorts-cli
+      - install -Dm755 target/release/shorts-studio /app/bin/shorts-studio
+      - install -Dm755 target/release/shorts /app/bin/shorts
+      - install -Dm644 flatpak/io.github.shortsstudio.ShortsStudio.desktop /app/share/applications/io.github.shortsstudio.ShortsStudio.desktop
+      - install -Dm644 flatpak/io.github.shortsstudio.ShortsStudio.metainfo.xml /app/share/metainfo/io.github.shortsstudio.ShortsStudio.metainfo.xml
+      - install -Dm644 flatpak/io.github.shortsstudio.ShortsStudio.svg /app/share/icons/hicolor/scalable/apps/io.github.shortsstudio.ShortsStudio.svg
+    sources:
+      - type: dir
+        path: ..
